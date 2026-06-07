@@ -1,10 +1,10 @@
 import React from 'react';
-import AviationDashboard from './components/AviationDashboard';
+import ILSMonitorDashboard from './components/Ilsmonitordashboard';
 
 function App() {
   return (
     <div className="App">
-      <AviationDashboard />
+      <ILSMonitorDashboard />
     </div>
   );
 }
