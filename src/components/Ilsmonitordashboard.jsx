@@ -302,6 +302,7 @@ export default function ILSMonitorDashboard() {
                         lastHI={lastHI}
                         lastRT={lastRT}
                         activeParams={activeParams}
+                        metrics={metrics}
                     />
 
                     {/* Chart View Toggle Toolbar */}
@@ -316,6 +317,7 @@ export default function ILSMonitorDashboard() {
                         dangerDay75={dangerDay75}
                         brushRange={brushRange}
                         setBrushRange={setBrushRange}
+                        metrics={metrics}
                     />
 
                 </main>

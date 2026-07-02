@@ -93,23 +93,30 @@ export default function Sidebar({
                         {renderAccordionHeader('degradation', <TrendingDown size={14} className="text-blue-600" />, 'Độ suy hao (Degradation)')}
                         {expandedSections.degradation && (
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
-                                <InputRow label="Hệ số suy hao pha 1" name="slope1" value={formParams.slope1} onChange={handleChange} step={0.01} unit="/ngày" hint="t ≤ breakDay" />
-                                <InputRow label="Hệ số suy hao pha 2" name="slope2" value={formParams.slope2} onChange={handleChange} step={0.01} unit="/ngày" hint="t > breakDay" />
-                                <InputRow label="Mốc chuyển pha" name="breakDay" value={formParams.breakDay} onChange={handleChange} step={1} unit="ngày" />
-                                <InputRow label="Biên độ môi trường (sin)" name="envAmp" value={formParams.envAmp} onChange={handleChange} step={0.1} />
-                                <InputRow label="Nhiễu hệ thống σ" name="noiseSigma" value={formParams.noiseSigma} onChange={handleChange} step={0.05} />
+                                <InputRow label="Hao mòn pha 1" name="degradP1" value={formParams.degradP1} onChange={handleChange} step={0.001} unit="/ngày" hint="Ngày 1 - 180 (Mùa khô & chạy roda)" />
+                                <InputRow label="Hao mòn pha 2" name="degradP2" value={formParams.degradP2} onChange={handleChange} step={0.001} unit="/ngày" hint="Ngày 181 - 300 (Thời tiết đỉnh điểm)" />
+                                <InputRow label="Hao mòn pha 3" name="degradP3" value={formParams.degradP3} onChange={handleChange} step={0.001} unit="/ngày" hint="Ngày 301 - 365 (Cuối chu kỳ)" />
                             </div>
                         )}
                     </div>
 
-                    {/* Accordion Section 3: Weather */}
+                    {/* Accordion Section 3: Weather Climatology */}
                     <div className="space-y-1">
-                        {renderAccordionHeader('weather', <Cloud size={14} className="text-blue-600" />, 'Dị thường thời tiết')}
+                        {renderAccordionHeader('weather', <Cloud size={14} className="text-blue-600" />, 'Khí hậu sân bay Vinh')}
                         {expandedSections.weather && (
-                            <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
-                                <InputRow label="Bắt đầu" name="weatherStart" value={formParams.weatherStart} onChange={handleChange} step={1} unit="ngày" />
-                                <InputRow label="Kết thúc" name="weatherEnd" value={formParams.weatherEnd} onChange={handleChange} step={1} unit="ngày" />
-                                <InputRow label="Cường độ suy hao" name="weatherMag" value={formParams.weatherMag} onChange={handleChange} step={0.1} />
+                            <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-2 text-[10px] text-slate-500 leading-relaxed font-medium">
+                                <p>
+                                    Hệ thống tự động đồng bộ hóa điều kiện nhiệt độ, độ ẩm trạm (Shelter Humidity), và lượng mưa theo các chu kỳ tháng thực tế của Vinh (VVVH):
+                                </p>
+                                <ul className="list-disc pl-4 space-y-1">
+                                    <li>Mùa khô (Tháng 1-4): Ít mưa, nhiệt độ mát mẻ.</li>
+                                    <li>Mùa hè ẩm (Tháng 5-6): Bắt đầu nắng nóng.</li>
+                                    <li>Mùa bão (Tháng 7-11): Đỉnh lượng mưa và độ ẩm trạm tăng cao (Shelter Humidity đạt ~70%).</li>
+                                    <li>Mùa đông ẩm (Tháng 12): Mát mẻ, mưa phùn nhẹ.</li>
+                                </ul>
+                                <p className="text-blue-600 font-semibold border-t border-slate-100 pt-1">
+                                    ✓ Đã kích hoạt 16 sự kiện mưa dông ngẫu nhiên ở giai đoạn tháng 7-11 để mô phỏng tác động sụt giảm RF.
+                                </p>
                             </div>
                         )}
                     </div>
@@ -120,7 +127,7 @@ export default function Sidebar({
                         {expandedSections.weibull && (
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
                                 <InputRow label="Shape β" name="beta" value={formParams.beta} onChange={handleChange} step={0.1} min={0.5} max={5} hint="β=1.5 → Pha hao mòn (Wear-out)" />
-                                <InputRow label="Scale η" name="eta" value={formParams.eta} onChange={handleChange} step={10} unit="ngày" hint="MTTF trung bình ≈ 365 ngày" />
+                                <InputRow label="Scale η" name="eta" value={formParams.eta} onChange={handleChange} step={10} unit="ngày" hint="MTTF trung bình ≈ 730 ngày" />
                             </div>
                         )}
                     </div>
@@ -130,8 +137,8 @@ export default function Sidebar({
                         {renderAccordionHeader('lstm', <Settings size={14} className="text-blue-600" />, 'Cấu hình LSTM')}
                         {expandedSections.lstm && (
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
-                                <InputRow label="Look-back window" name="lookBack" value={formParams.lookBack} onChange={handleChange} step={1} min={3} max={30} unit="ngày" />
-                                <InputRow label="Tỷ lệ tập Train" name="trainRatio" value={formParams.trainRatio} onChange={handleChange} step={0.05} min={0.5} max={0.9} hint="0.7 = 70% train / 30% test" />
+                                <InputRow label="Look-back window" name="lookBack" value={formParams.lookBack} onChange={handleChange} step={1} min={10} max={60} unit="ngày" />
+                                <InputRow label="Tỷ lệ tập Train" name="trainRatio" value={formParams.trainRatio} onChange={handleChange} step={0.01} min={0.5} max={0.9} hint="0.748 = ~273 ngày train (hết tháng 9)" />
                                 <InputRow label="Hạt giống Random (Seed)" name="seed" value={formParams.seed} onChange={handleChange} step={1} hint="Thay đổi để tạo nhiễu ngẫu nhiên" />
                             </div>
                         )}
