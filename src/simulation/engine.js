@@ -1,3 +1,5 @@
+import airportInfo from './ils_info.json';
+
 // ============================================================
 //  SEEDED PSEUDO-RANDOM NUMBER GENERATOR (Mulberry32)
 //  Replicates numpy.random.seed(42) deterministic behavior
@@ -574,7 +576,7 @@ export function generateSimulationLogs(chartData, params) {
                 day: d.day,
                 date: d.date,
                 type: 'warning',
-                message: `Dị thường thời tiết: Có mưa giông sét lớn tại Vinh. Độ ẩm trạm đạt ${d.shelterHum}%, thúc đẩy suy giảm công suất.`
+                message: `Dị thường thời tiết: Có mưa giông sét lớn tại sân bay ${airportInfo.AIRPORT_ICAO || 'Vinh'}. Độ ẩm trạm đạt ${d.shelterHum}%, thúc đẩy suy giảm công suất.`
             });
         }
 

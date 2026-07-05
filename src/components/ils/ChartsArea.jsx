@@ -4,6 +4,7 @@ import {
 } from 'recharts';
 import { HelpCircle, TrendingDown, Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
 import ChartTooltip from './ChartTooltip';
+import airportInfo from '../../simulation/ils_info.json';
 
 // ============================================================
 //  CHARTS AREA — all 4 chart panels (Primary & Secondary)
@@ -40,7 +41,7 @@ export default function ChartsArea({
                             BIỂU ĐỒ CHÍNH (PHÂN TÍCH CÔNG SUẤT RF POWER)
                         </h3>
                         <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mt-0.5">
-                            Chu kỳ 365 ngày (năm 2026) - Dự án Đài dẫn đường ILS Vinh (VVVH)
+                            Chu kỳ 365 ngày (năm 2026) - Dự án Đài dẫn đường ILS ${airportInfo.AIRPORT_NAME?.replace(" International Airport", "")?.replace(" Airport", "") || "Vinh"} (${airportInfo.AIRPORT_ICAO || "VVVH"})
                         </p>
                     </div>
 
@@ -250,7 +251,7 @@ export default function ChartsArea({
                 <div className="bg-white border border-sky-100 rounded-xl p-5 shadow-sm shadow-blue-50/50 hover:shadow-md hover:shadow-blue-100/40 transition-all duration-200">
                     <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2 mb-4">
                         <span className="w-2.5 h-2.5 rounded-full bg-orange-400" />
-                        Nhiệt độ &amp; Độ ẩm môi trường trạm Vinh
+                        Nhiệt độ &amp; Độ ẩm môi trường trạm ${airportInfo.AIRPORT_NAME?.replace(" International Airport", "")?.replace(" Airport", "") || "Vinh"}
                     </h2>
                     <ResponsiveContainer width="100%" height={300}>
                         <LineChart syncId="ils-charts" data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -265,29 +266,6 @@ export default function ChartsArea({
                             <Line yAxisId="hum" type="monotone" dataKey="shelterHum" name="Độ ẩm trong trạm (%)" stroke="#0EA5E9" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
                         </LineChart>
                     </ResponsiveContainer>
-                </div>
-            )}
-
-            {/* SECTION 4: FORMULA REFERENCE */}
-            {(chartView === 'all' || chartView === 'formula') && (
-                <div className="bg-white border border-sky-100 rounded-xl p-5 shadow-sm shadow-blue-50/50 hover:shadow-md hover:shadow-blue-100/40 transition-all duration-200">
-                    <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2 mb-4">
-                        <HelpCircle size={14} className="text-slate-500" />
-                        Công thức toán học &amp; Mô hình hệ thống (Vinh Algorithm)
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {[
-                            { title: '1. Xu hướng hao mòn 3 giai đoạn (Vinh Climatology)', expr: 'D_base(t) = 0.018  [t ≤ 180]\n          = 0.034  [180 < t ≤ 300]\n          = 0.026  [t > 300]' },
-                            { title: '2. Tác động môi trường tích lũy', expr: 'D_env(t) = 0.006 · Rain_Index(t) + 0.004 · Humidity_Stress(t)\nD_event(t) = 0.018 · Storm_Event(t)\nTotal_Degradation(t) = cumsum(D_base + D_env + D_event)' },
-                            { title: '3. Hiệu chỉnh dự báo LSTM (Trend Corrected)', expr: 'Polyfit(recent_21) → Slope, Intercept\nTrend_21_Pred = Intercept + Slope · 21\nRF_Corrected = 0.55 · LSTM_Raw + 0.35 · Trend_21_Pred + 0.10 · MA_14\n(Clip RF_Corrected không vượt quá RF_Actual ngày trước)' },
-                            { title: '4. Độ tin cậy R(t) Weibull tích lũy', expr: 'λ(t) = (β / η) · (t / η)^(β − 1) · (1.0 + (1.0 − HI(t)))\nR(t) = exp(−∑_{k=1..t} λ(k))   [Với β = 1.5, η = 730]' },
-                        ].map(f => (
-                            <div key={f.title} className="bg-slate-50 border border-slate-100 rounded-lg p-4">
-                                <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-2">{f.title}</div>
-                                <pre className="text-[10px] text-slate-600 font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">{f.expr}</pre>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             )}
 

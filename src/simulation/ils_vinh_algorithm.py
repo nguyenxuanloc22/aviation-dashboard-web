@@ -32,6 +32,28 @@ LOC_FREQ_MHZ = 108.300
 GP_FREQ_MHZ = 334.100
 DME_CHANNEL = "CH 20X"
 
+# Export configuration parameters to JSON for Frontend consumption
+try:
+    import json
+    import os
+    config_data = {
+        "AIRPORT_ICAO": AIRPORT_ICAO,
+        "AIRPORT_NAME": AIRPORT_NAME,
+        "RUNWAY": RUNWAY,
+        "ILS_RWY": ILS_RWY,
+        "ILS_ID": ILS_ID,
+        "LOC_FREQ_MHZ": LOC_FREQ_MHZ,
+        "GP_FREQ_MHZ": GP_FREQ_MHZ,
+        "DME_CHANNEL": DME_CHANNEL
+    }
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    json_path = os.path.join(script_dir, "ils_info.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(config_data, f, ensure_ascii=False, indent=4)
+    print(f"Đã xuất cấu hình ra file: {json_path}")
+except Exception as e:
+    print(f"Lỗi khi xuất file JSON cấu hình: {e}")
+
 print("============================================================")
 print(f"MÔ PHỎNG RF POWER SUY GIẢM THEO THỜI GIAN - {AIRPORT_ICAO}")
 print(f"Sân bay: {AIRPORT_NAME}")

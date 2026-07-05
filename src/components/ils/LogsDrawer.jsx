@@ -1,5 +1,15 @@
 import { Calendar, Info, Search, Copy, Check, AlertTriangle, AlertCircle } from 'lucide-react';
 
+const formatDayToDate = (day) => {
+    if (!day) return '';
+    const date = new Date(2026, 0, 1);
+    date.setDate(date.getDate() + (day - 1));
+    const d = date.getDate();
+    const m = date.getMonth() + 1;
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+};
+
 // ============================================================
 //  WARNING LOGS DRAWER
 //  Props:
@@ -167,7 +177,7 @@ export default function LogsDrawer({
                                         ) : (
                                             <AlertCircle size={12} className="text-amber-500" />
                                         )}
-                                        Ngày thứ {log.day}
+                                        Ngày {formatDayToDate(log.day)} (Ngày thứ {log.day})
                                     </span>
                                     <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold tracking-wide uppercase ${
                                         log.type === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'

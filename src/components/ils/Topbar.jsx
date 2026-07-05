@@ -1,4 +1,4 @@
-import { Activity, RefreshCw, Calendar, Info, TrendingDown, ChevronDown } from 'lucide-react';
+import { Activity, RefreshCw, Calendar, Info, TrendingDown, ChevronDown, Sliders } from 'lucide-react';
 
 // Helper to convert day index (1-365) to solar calendar date DD/MM/YYYY in 2026
 const formatDayToDate = (day) => {
@@ -43,10 +43,19 @@ export default function Topbar({
     handleUpdate,
     isRunning,
     hasUnsavedChanges,
+    isSidebarCollapsed,
+    setIsSidebarCollapsed,
 }) {
     return (
         <header className="bg-white border-b border-sky-100 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm z-30 relative">
             <div className="flex items-center gap-3">
+                <button 
+                    onClick={() => setIsSidebarCollapsed(prev => !prev)}
+                    className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl lg:hidden flex items-center justify-center cursor-pointer shadow-xs"
+                    title={isSidebarCollapsed ? "Mở bảng cấu hình" : "Đóng bảng cấu hình"}
+                >
+                    <Sliders size={18} />
+                </button>
                 <div className="bg-blue-600 text-white p-2 rounded-xl shadow-md shadow-blue-500/20 flex items-center justify-center">
                     <Activity size={20} className="animate-[pulse_2s_infinite]" />
                 </div>
@@ -91,14 +100,22 @@ export default function Topbar({
                         <>
                             {/* Click-outside backdrop */}
                             <div
-                                className="fixed inset-0 z-[50]"
+                                className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs md:bg-transparent md:backdrop-blur-none z-[50]"
                                 onClick={() => setShowMilestonesDropdown(false)}
                             />
-                            <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-[51] overflow-hidden">
+                            <div className="fixed md:absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:translate-x-0 md:translate-y-0 md:top-full md:left-auto md:right-0 md:mt-2 w-[calc(100vw-32px)] max-w-[340px] md:w-80 bg-white border border-slate-200 rounded-xl shadow-2xl z-[51] overflow-hidden">
                                 {/* Dropdown Header */}
-                                <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-100 flex items-center gap-2">
-                                    <TrendingDown size={14} className="text-blue-600" />
-                                    <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">Mốc sự kiện dự báo</span>
+                                <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-100 flex items-center justify-between gap-2">
+                                    <span className="flex items-center gap-2">
+                                        <TrendingDown size={14} className="text-blue-600" />
+                                        <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">Mốc sự kiện dự báo</span>
+                                    </span>
+                                    <button 
+                                        onClick={() => setShowMilestonesDropdown(false)}
+                                        className="text-slate-400 hover:text-slate-600 p-1 font-bold text-xs md:hidden cursor-pointer"
+                                    >
+                                        ✕
+                                    </button>
                                 </div>
                                 {/* Milestones List */}
                                 <div className="p-3 space-y-2">

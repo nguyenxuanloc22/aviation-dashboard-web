@@ -12,7 +12,6 @@ export default function ChartViewToolbar({ chartView, setChartView }) {
                 { id: 'rf',      label: 'RF Power',             icon: '①',  color: 'indigo' },
                 { id: 'health',  label: 'Sức khỏe & Độ tin cậy', icon: '②③', color: 'violet' },
                 { id: 'env',     label: 'Môi trường',           icon: '④',  color: 'orange' },
-                { id: 'formula', label: 'Công thức',            icon: '∫',  color: 'slate'  },
             ].map(tab => {
                 const active = chartView === tab.id;
                 const colorMap = {
@@ -20,7 +19,6 @@ export default function ChartViewToolbar({ chartView, setChartView }) {
                     indigo: active ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600',
                     violet: active ? 'bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-200' : 'bg-white text-slate-500 border-slate-200 hover:border-violet-300 hover:text-violet-600',
                     orange: active ? 'bg-orange-500 text-white border-orange-500 shadow-md shadow-orange-200' : 'bg-white text-slate-500 border-slate-200 hover:border-orange-300 hover:text-orange-600',
-                    slate:  active ? 'bg-slate-700 text-white border-slate-700 shadow-md shadow-slate-200'  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400 hover:text-slate-700',
                 };
                 return (
                     <button

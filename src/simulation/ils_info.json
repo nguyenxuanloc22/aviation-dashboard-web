@@ -1,0 +1,10 @@
+{
+    "AIRPORT_ICAO": "VVVH",
+    "AIRPORT_NAME": "Vinh International Airport",
+    "RUNWAY": "RWY 17/35",
+    "ILS_RWY": "RWY 17",
+    "ILS_ID": "IVH",
+    "LOC_FREQ_MHZ": 108.3,
+    "GP_FREQ_MHZ": 334.1,
+    "DME_CHANNEL": "CH 20X"
+}

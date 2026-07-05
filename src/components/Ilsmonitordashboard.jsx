@@ -12,6 +12,7 @@ import Sidebar          from './ils/Sidebar';
 import KpiCards         from './ils/KpiCards';
 import ChartViewToolbar from './ils/ChartViewToolbar';
 import ChartsArea       from './ils/ChartsArea';
+import AirportInfoPanel from './ils/AirportInfoPanel';
 
 // Helper to convert day index (1-365) to solar calendar date DD/MM/YYYY in 2026
 const formatDayToDate = (day) => {
@@ -55,7 +56,7 @@ export default function ILSMonitorDashboard() {
     const [showMilestonesDropdown, setShowMilestonesDropdown] = useState(false);
     const [pulseMilestones, setPulseMilestones] = useState(false);
 
-    // Chart View Mode: 'all' | 'rf' | 'health' | 'env' | 'formula'
+    // Chart View Mode: 'all' | 'rf' | 'health' | 'env'
     const [chartView, setChartView] = useState('all');
 
     const toggleSection = (section) => {
@@ -74,6 +75,13 @@ export default function ILSMonitorDashboard() {
     React.useEffect(() => {
         setBrushRange(null);
     }, [chartData]);
+
+    // Collapse sidebar by default on small screens
+    React.useEffect(() => {
+        if (window.innerWidth < 1024) {
+            setIsSidebarCollapsed(true);
+        }
+    }, []);
 
     const addToast = useCallback((level, title, msg) => {
         const id = Date.now() + Math.random();
@@ -291,9 +299,19 @@ export default function ILSMonitorDashboard() {
                 handleUpdate={handleUpdate}
                 isRunning={isRunning}
                 hasUnsavedChanges={hasUnsavedChanges}
+                isSidebarCollapsed={isSidebarCollapsed}
+                setIsSidebarCollapsed={setIsSidebarCollapsed}
             />
 
             <div className="flex flex-1 overflow-hidden relative">
+
+                {/* Mobile Sidebar Backdrop Overlay */}
+                {!isSidebarCollapsed && (
+                    <div 
+                        className="fixed inset-0 bg-slate-900/40 z-30 lg:hidden"
+                        onClick={() => setIsSidebarCollapsed(true)}
+                    />
+                )}
 
                 {/* Sidebar with Accordion Parameter Panels */}
                 <Sidebar
@@ -318,6 +336,9 @@ export default function ILSMonitorDashboard() {
                         activeParams={activeParams}
                         metrics={metrics}
                     />
+
+                    {/* Airport and ILS Specifications Panel */}
+                    <AirportInfoPanel />
 
                     {/* Chart View Toggle Toolbar */}
                     <ChartViewToolbar chartView={chartView} setChartView={setChartView} />

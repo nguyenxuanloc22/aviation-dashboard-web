@@ -1,5 +1,6 @@
 import { Sliders, Settings, TrendingDown, Cloud, ShieldAlert, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import InputRow from './InputRow';
+import airportInfo from '../../simulation/ils_info.json';
 
 // ============================================================
 //  SIDEBAR WITH ACCORDIONS
@@ -41,9 +42,12 @@ export default function Sidebar({
 
     return (
         <aside 
-            className={`bg-gradient-to-b from-[#EBF4FC] to-[#F3F8FD] border-r border-slate-200 flex flex-col transition-all duration-300 ${
-                isSidebarCollapsed ? 'w-12' : 'w-72'
-            } flex-shrink-0 z-20`}
+            className={`bg-gradient-to-b from-[#EBF4FC] to-[#F3F8FD] border-r border-slate-200 flex flex-col transition-all duration-300
+                fixed lg:relative top-0 bottom-0 left-0 h-full lg:h-auto z-40 lg:z-20 flex-shrink-0 
+                ${isSidebarCollapsed 
+                    ? '-translate-x-full lg:translate-x-0 lg:w-12' 
+                    : 'translate-x-0 lg:w-72 w-72 shadow-2xl lg:shadow-none'
+                }`}
         >
             {/* Sidebar Toggle and Title */}
             <div className="p-3 border-b border-blue-100/50 flex items-center justify-between min-h-[48px] bg-white/40">
@@ -102,11 +106,11 @@ export default function Sidebar({
 
                     {/* Accordion Section 3: Weather Climatology */}
                     <div className="space-y-1">
-                        {renderAccordionHeader('weather', <Cloud size={14} className="text-blue-600" />, 'Khí hậu sân bay Vinh')}
+                        {renderAccordionHeader('weather', <Cloud size={14} className="text-blue-600" />, `Khí hậu sân bay ${airportInfo.AIRPORT_NAME?.replace(" International Airport", "")?.replace(" Airport", "") || "Vinh"}`)}
                         {expandedSections.weather && (
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-2 text-[10px] text-slate-500 leading-relaxed font-medium">
                                 <p>
-                                    Hệ thống tự động đồng bộ hóa điều kiện nhiệt độ, độ ẩm trạm (Shelter Humidity), và lượng mưa theo các chu kỳ tháng thực tế của Vinh (VVVH):
+                                    Hệ thống tự động đồng bộ hóa điều kiện nhiệt độ, độ ẩm trạm (Shelter Humidity), và lượng mưa theo các chu kỳ tháng thực tế của ${airportInfo.AIRPORT_NAME?.replace(" International Airport", "")?.replace(" Airport", "") || "Vinh"} (${airportInfo.AIRPORT_ICAO || "VVVH"}):
                                 </p>
                                 <ul className="list-disc pl-4 space-y-1">
                                     <li>Mùa khô (Tháng 1-4): Ít mưa, nhiệt độ mát mẻ.</li>
