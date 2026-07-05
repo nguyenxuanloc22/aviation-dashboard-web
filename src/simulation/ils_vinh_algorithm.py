@@ -1,9 +1,17 @@
+# ============================================================
+# DỰ BÁO RF POWER ILS VINH - LSTM KẾT HỢP ISOLATION FOREST
+# ============================================================
+# ============================================================
+# 1. THƯ VIỆN
+# ============================================================
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.ensemble import IsolationForest
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
@@ -49,18 +57,18 @@ months = dates.month.values
 # ============================================================
 
 monthly_temp_mean = {
-    1: 19.0, 2: 20.5, 3: 22.0, 4: 29.0, 5: 29.0, 6: 32.0,
-    7: 30.0, 8: 31.0, 9: 28.5, 10: 26.0, 11: 23.0, 12: 19.0
+          1: 19.0, 2: 20.5, 3: 22.0, 4: 29.0, 5: 29.0, 6: 32.0,
+          7: 30.0, 8: 31.0, 9: 28.5, 10: 26.0, 11: 23.0, 12: 19.0
 }
 
 monthly_rain_index = {
-    1: 0.11, 2: 0.03, 3: 0.06, 4: 0.02, 5: 0.17, 6: 0.07,
-    7: 0.26, 8: 0.03, 9: 1.00, 10: 0.44, 11: 0.17, 12: 0.06
+          1: 0.11, 2: 0.03, 3: 0.06, 4: 0.02, 5: 0.17, 6: 0.07,
+          7: 0.26, 8: 0.03, 9: 1.00, 10: 0.44, 11: 0.17, 12: 0.06
 }
 
 monthly_ambient_humidity = {
-    1: 90, 2: 90, 3: 89, 4: 81, 5: 82, 6: 71,
-    7: 76, 8: 72, 9: 84, 10: 80, 11: 86, 12: 82
+          1: 90, 2: 90, 3: 89, 4: 81, 5: 82, 6: 71,
+          7: 76, 8: 72, 9: 84, 10: 80, 11: 86, 12: 82
 }
 
 base_temp_by_month = np.array([monthly_temp_mean[m] for m in months])
@@ -74,111 +82,120 @@ ambient_humidity = base_humidity_by_month + 5.0 * rain_index + np.random.normal(
 ambient_humidity = np.clip(ambient_humidity, 55, 98)
 
 shelter_humidity = (
-    52
-    + 0.18 * (ambient_humidity - 75)
-    + 2.0 * rain_index
-    + np.random.normal(0, 0.8, days)
+          52
+          + 0.18 * (ambient_humidity - 75)
+          + 2.0 * rain_index
+          + np.random.normal(0, 0.8, days)
 )
 shelter_humidity = np.clip(shelter_humidity, 40, 70)
 
 # ============================================================
-# 5. MÔ PHỎNG RF POWER SUY GIẢM MỘT CHIỀU
 # ============================================================
-# Cách làm cũ làm RF lúc tăng lúc giảm vì cộng weather, maintenance, noise trực tiếp.
-# Bản này chuyển các tác động đó thành "mức suy giảm tích lũy".
-# Vì là suy giảm tích lũy nên RF Power sẽ có xu hướng đi xuống rõ ràng theo thời gian.
+# 5. MÔ PHỎNG RF POWER THEO MÔ HÌNH SUY GIẢM CÓ CƠ SỞ ĐỘ TIN CẬY
+# ============================================================
+# RF_Power được biểu diễn theo dạng tương đối (% so với mức chuẩn ban đầu).
+# Các thông số môi trường ở mục 4 được giữ nguyên; phần này chỉ thay đổi cách tính suy giảm RF.
+# Mô hình sử dụng các thành phần: tuổi thiết bị, nhiệt độ, độ ẩm và thời tiết bất lợi.
+# Các hệ số hiệu chuẩn vẫn là tham số mô phỏng vì chưa có dữ liệu đo kiểm/bảo dưỡng thực tế của ILS Vinh.
 
 baseline_rf = 100.0
-warning_threshold_rf = 92.0
-alarm_threshold_rf = 88.0
+warning_threshold_rf = 92.0                # Ngưỡng cảnh báo nội bộ của mô hình mô phỏng
+alarm_threshold_rf = 88.0                     # Ngưỡng nguy hiểm nội bộ của mô hình mô phỏng
+health_floor_rf = 85.0                              # Mốc chuẩn hóa Health Index = 0 trong mô hình
 
-# 5.1. Suy giảm nền theo ngày
-# 6 tháng đầu giảm chậm, sau đó giảm rõ hơn do tuổi thiết bị và mùa mưa.
-daily_degradation = np.zeros(days)
+# 5.1. Thành phần suy giảm theo tuổi thiết bị - Weibull hazard
+# beta_age > 1 thể hiện xu hướng rủi ro/suy giảm tăng dần theo thời gian khai thác.
+# eta_age là tham số thang thời gian giả định, dùng cho mô phỏng tương đối.
+beta_age = 1.5
+eta_age = 730.0
 
-for t in range(days):
-    if t <= 180:
-        daily_degradation[t] = 0.018
-    elif t <= 300:
-        daily_degradation[t] = 0.034
-    else:
-        daily_degradation[t] = 0.026
-
-# 5.2. Tác động mùa mưa/độ ẩm làm tăng mức suy giảm hằng ngày
-humidity_stress = np.clip((shelter_humidity - 55) / 20, 0, 1)
-rain_stress = rain_index
-
-environment_degradation = (
-    0.006 * rain_stress
-    + 0.004 * humidity_stress
+t_days = np.arange(1, days + 1)
+age_degradation_factor = (
+          (beta_age / eta_age)
+          * (t_days / eta_age) ** (beta_age - 1)
 )
 
-# 5.3. Sự kiện mưa dông/nhiễu điện chỉ làm tăng tốc độ suy giảm,
-# không làm RF nhảy lên xuống bất thường.
+# 5.2. Hệ số gia tốc theo nhiệt độ - dạng Arrhenius
+# Ea và kB được dùng để mô phỏng tác động tăng tốc của nhiệt độ đối với linh kiện điện tử.
+Ea = 0.70
+kB = 8.617333262145e-5
+
+T_ref_K = 25.0 + 273.15
+T_use_K = ambient_temperature + 273.15
+
+temperature_acceleration = np.exp(
+          (Ea / kB) * (1.0 / T_ref_K - 1.0 / T_use_K)
+)
+
+# 5.3. Hệ số gia tốc theo độ ẩm - dạng Peck/Hallberg-Peck
+# Sử dụng độ ẩm nhà trạm đã mô phỏng ở mục 4, không thay đổi dữ liệu môi trường.
+RH_ref = 55.0
+humidity_exponent = 2.66
+
+humidity_acceleration = (
+          np.maximum(shelter_humidity, 1.0) / RH_ref
+) ** humidity_exponent
+
+# 5.4. Sự kiện thời tiết bất lợi
+# Giữ cách tạo storm_event dựa trên mùa mưa như bản gốc để không thay đổi yếu tố môi trường.
 storm_event = np.zeros(days)
 storm_candidate = np.where(np.isin(months, [7, 8, 9, 10, 11]))[0]
 storm_weights = rain_index[storm_candidate] / rain_index[storm_candidate].sum()
 
 storm_days = np.random.choice(
-    storm_candidate,
-    size=16,
-    replace=False,
-    p=storm_weights
+          storm_candidate,
+          size=16,
+          replace=False,
+          p=storm_weights
 )
 
 storm_event[storm_days] = 1
-event_degradation = 0.018 * storm_event
 
-# 5.4. Tổng suy giảm theo ngày
-# Bản này đã bỏ yếu tố bảo trì.
-# RF suy giảm do 3 nhóm chính:
-#   - suy giảm nền theo thời gian;
-#   - tác động môi trường: mưa, độ ẩm nhà trạm;
-#   - sự kiện thời tiết bất lợi.
-total_daily_degradation = (
-    daily_degradation
-    + environment_degradation
-    + event_degradation
+# 5.5. Hệ số thời tiết bất lợi
+# rain_index và storm_event chỉ làm thay đổi mức gia tốc suy giảm, không tạo lại dữ liệu môi trường.
+weather_factor = (1.0 + 0.35 * rain_index) * (1.0 + 0.25 * storm_event)
+
+# 5.6. Chỉ số suy giảm thô trong từng ngày
+raw_daily_damage = (
+          age_degradation_factor
+          * temperature_acceleration
+          * humidity_acceleration
+          * weather_factor
 )
 
-# Không cho suy giảm ngày âm.
-total_daily_degradation = np.clip(total_daily_degradation, 0.004, None)
+# 5.7. Hiệu chuẩn mức suy giảm trong chu kỳ mô phỏng
+# Vì chưa có dữ liệu RF Power thực tế theo ngày của ILS Vinh,
+# scenario_end_rf được dùng để hiệu chuẩn kịch bản suy giảm trong 1 năm.
+# Khi có dữ liệu đo kiểm/bảo dưỡng thực tế, giá trị này cần được thay bằng dữ liệu thật.
+scenario_end_rf = 90.0
+scenario_total_degradation = baseline_rf - scenario_end_rf
 
-# 5.5. Suy giảm tích lũy
+scale_factor = scenario_total_degradation / np.sum(raw_daily_damage)
+
+total_daily_degradation = scale_factor * raw_daily_damage
 cumulative_degradation = np.cumsum(total_daily_degradation)
 
-# 5.6. RF Power
-# Thêm nhiễu rất nhỏ rồi làm mượt, sau đó ép không tăng theo thời gian.
-small_noise = np.random.normal(0, 0.025, days)
-rf_power_raw = baseline_rf - cumulative_degradation + small_noise
+# 5.8. RF Power tương đối
+rf_power = baseline_rf - cumulative_degradation
 
-# Làm mượt để đồ thị tự nhiên hơn
-rf_power_smooth = pd.Series(rf_power_raw).rolling(window=5, min_periods=1).mean().values
+# Giới hạn giá trị để chuỗi mô phỏng không vượt ngoài phạm vi đánh giá của mô hình.
+rf_power = np.clip(rf_power, health_floor_rf, 102.0)
 
-# Ép RF không tăng theo thời gian: giá trị ngày sau không được cao hơn ngày trước.
-# Điều này giúp đồ thị thể hiện đúng ý "suy giảm theo thời gian".
-# Giả định này phù hợp với mô phỏng không xét bảo trì; thực tế RF có thể dao động nhẹ.
-rf_power = np.minimum.accumulate(rf_power_smooth)
-
-# Giới hạn dưới để không rơi xuống alarm quá sâu trong 1 năm
-rf_power = np.clip(rf_power, 86.5, 102)
-
-# ============================================================
 # 6. MÔ PHỎNG DDM VÀ SDM
 # ============================================================
 
 ddm_loc = (
-    np.random.normal(0, 0.004, days)
-    + 0.00045 * (shelter_humidity - 55)
-    + 0.0015 * storm_event
+          np.random.normal(0, 0.004, days)
+          + 0.00045 * (shelter_humidity - 55)
+          + 0.0015 * storm_event
 )
 ddm_loc = np.clip(ddm_loc, -0.035, 0.035)
 
 sdm_loc = (
-    40.0
-    + np.random.normal(0, 0.08, days)
-    - 0.005 * rain_index
-    - 0.010 * storm_event
+          40.0
+          + np.random.normal(0, 0.08, days)
+          - 0.005 * rain_index
+          - 0.010 * storm_event
 )
 sdm_loc = np.clip(sdm_loc, 39.65, 40.35)
 
@@ -187,18 +204,96 @@ sdm_loc = np.clip(sdm_loc, 39.65, 40.35)
 # ============================================================
 
 df = pd.DataFrame({
-    "Date": dates,
-    "RF_Power": rf_power,
-    "DDM_LOC": ddm_loc,
-    "SDM_LOC": sdm_loc,
-    "Ambient_Temperature": ambient_temperature,
-    "Ambient_Humidity": ambient_humidity,
-    "Shelter_Humidity": shelter_humidity,
-    "Rain_Index": rain_index,
-    "Storm_Event": storm_event,
-    "Daily_Degradation": total_daily_degradation,
-    "Cumulative_Degradation": cumulative_degradation
+          "Date": dates,
+          "RF_Power": rf_power,
+          "DDM_LOC": ddm_loc,
+          "SDM_LOC": sdm_loc,
+          "Ambient_Temperature": ambient_temperature,
+          "Ambient_Humidity": ambient_humidity,
+          "Shelter_Humidity": shelter_humidity,
+          "Rain_Index": rain_index,
+          "Storm_Event": storm_event,
+          "Daily_Degradation": total_daily_degradation,
+          "Cumulative_Degradation": cumulative_degradation
 })
+
+
+# ============================================================
+# 7A. PHÁT HIỆN VÀ XỬ LÝ ĐIỂM BẤT THƯỜNG BẰNG ISOLATION FOREST
+# ============================================================
+# Isolation Forest được dùng để phát hiện các điểm bất thường trong RF, DDM và SDM.
+# Các yếu tố môi trường không bị loại bỏ, mà vẫn được giữ làm biến đầu vào cho LSTM.
+# Mục tiêu của bước này là giảm ảnh hưởng của nhiễu/điểm không đại diện trước khi huấn luyện.
+
+train_cutoff_date = pd.Timestamp("2026-10-01")
+train_cutoff = np.where(df["Date"] < train_cutoff_date)[0][-1] + 1
+
+# Tạo độ lệch cục bộ so với trung vị 7 ngày.
+# Cách này giúp tránh việc Isolation Forest hiểu nhầm xu hướng suy giảm dài hạn là bất thường.
+df["RF_Median_7"] = df["RF_Power"].rolling(window=7, min_periods=1).median()
+df["RF_Deviation_7"] = df["RF_Power"] - df["RF_Median_7"]
+
+df["DDM_Median_7"] = df["DDM_LOC"].rolling(window=7, min_periods=1).median()
+df["DDM_Deviation_7"] = df["DDM_LOC"] - df["DDM_Median_7"]
+
+df["SDM_Median_7"] = df["SDM_LOC"].rolling(window=7, min_periods=1).median()
+df["SDM_Deviation_7"] = df["SDM_LOC"] - df["SDM_Median_7"]
+
+df["RF_Change_1"] = df["RF_Power"].diff().fillna(0)
+df["DDM_Change_1"] = df["DDM_LOC"].diff().fillna(0)
+df["SDM_Change_1"] = df["SDM_LOC"].diff().fillna(0)
+
+# Chỉ dùng độ lệch kỹ thuật để phát hiện bất thường.
+# Không dùng trực tiếp nhiệt độ, độ ẩm hoặc mưa để tránh loại bỏ sai tác động môi trường thật.
+isolation_cols = [
+    "RF_Deviation_7",
+    "DDM_Deviation_7",
+    "SDM_Deviation_7",
+    "RF_Change_1",
+    "DDM_Change_1",
+    "SDM_Change_1"
+]
+
+iso_scaler = MinMaxScaler(feature_range=(0, 1))
+iso_train = iso_scaler.fit_transform(df[isolation_cols].iloc[:train_cutoff])
+iso_all = iso_scaler.transform(df[isolation_cols])
+
+iso_model = IsolationForest(
+    n_estimators=200,
+    contamination=0.03,
+    random_state=42
+)
+
+# Chỉ huấn luyện Isolation Forest trên tập train để hạn chế rò rỉ dữ liệu từ giai đoạn test.
+iso_model.fit(iso_train)
+
+df["Anomaly_Label"] = iso_model.predict(iso_all)
+df["Anomaly_Flag"] = (df["Anomaly_Label"] == -1).astype(int)
+df["Anomaly_Score"] = -iso_model.score_samples(iso_all)
+
+# Làm sạch điểm bất thường:
+# - Không thay đổi các biến môi trường.
+# - Không thay các ngày có storm_event để tránh xóa tác động thời tiết bất lợi đã mô phỏng.
+# - Chỉ thay RF, DDM và SDM bằng trung vị 7 ngày tại các điểm bất thường không thuộc storm_event.
+clean_mask = (df["Anomaly_Flag"] == 1) & (df["Storm_Event"] == 0)
+
+df["RF_Power_Clean"] = df["RF_Power"].copy()
+df["DDM_LOC_Clean"] = df["DDM_LOC"].copy()
+df["SDM_LOC_Clean"] = df["SDM_LOC"].copy()
+
+df.loc[clean_mask, "RF_Power_Clean"] = df.loc[clean_mask, "RF_Median_7"]
+df.loc[clean_mask, "DDM_LOC_Clean"] = df.loc[clean_mask, "DDM_Median_7"]
+df.loc[clean_mask, "SDM_LOC_Clean"] = df.loc[clean_mask, "SDM_Median_7"]
+
+# Sử dụng chuỗi đã làm sạch cho các bước tạo đặc trưng và huấn luyện LSTM.
+df["RF_Power"] = df["RF_Power_Clean"]
+df["DDM_LOC"] = df["DDM_LOC_Clean"]
+df["SDM_LOC"] = df["SDM_LOC_Clean"]
+
+print("\nSố điểm bất thường được Isolation Forest phát hiện:")
+print(df["Anomaly_Flag"].sum())
+print("Số điểm bất thường được làm sạch, không tính storm_event:")
+print(clean_mask.sum())
 
 # Biến thời gian và xu hướng hỗ trợ LSTM
 df["Day_Index"] = np.arange(len(df)) / (len(df) - 1)
@@ -216,24 +311,24 @@ print(df.head())
 warning_cross = df[df["RF_Power"] < warning_threshold_rf]
 
 if len(warning_cross) > 0:
-    first_warning_date = warning_cross.iloc[0]["Date"]
-    first_warning_rf = warning_cross.iloc[0]["RF_Power"]
-    print(f"\nRF Power lần đầu xuống dưới ngưỡng cảnh báo 92%: {first_warning_date.date()}")
-    print(f"RF Power tại thời điểm đó: {first_warning_rf:.2f}%")
+          first_warning_date = warning_cross.iloc[0]["Date"]
+          first_warning_rf = warning_cross.iloc[0]["RF_Power"]
+          print(f"\nRF Power lần đầu xuống dưới ngưỡng cảnh báo 92%: {first_warning_date.date()}")
+          print(f"RF Power tại thời điểm đó: {first_warning_rf:.2f}%")
 else:
-    print("\nRF Power chưa xuống dưới 92% trong chu kỳ mô phỏng.")
+          print("\nRF Power chưa xuống dưới 92% trong chu kỳ mô phỏng.")
 
 # ============================================================
 # 8. HÀM PHÂN LOẠI TRẠNG THÁI
 # ============================================================
 
 def classify_rf_status(rf):
-    if rf < alarm_threshold_rf:
-        return "NGUY_HIEM"
-    elif rf < warning_threshold_rf:
-        return "CANH_BAO"
-    else:
-        return "BINH_THUONG"
+          if rf < alarm_threshold_rf:
+                    return "NGUY_HIEM"
+          elif rf < warning_threshold_rf:
+                    return "CANH_BAO"
+          else:
+                    return "BINH_THUONG"
 
 df["Status_RF"] = df["RF_Power"].apply(classify_rf_status)
 
@@ -242,23 +337,25 @@ df["Status_RF"] = df["RF_Power"].apply(classify_rf_status)
 # ============================================================
 
 feature_cols = [
-    "RF_Power",
-    "DDM_LOC",
-    "SDM_LOC",
-    "Ambient_Temperature",
-    "Ambient_Humidity",
-    "Shelter_Humidity",
-    "Rain_Index",
-    "Storm_Event",
-    "Daily_Degradation",
-    "Cumulative_Degradation",
-    "Day_Index",
-    "Month_Sin",
-    "Month_Cos",
-    "RF_MA_7",
-    "RF_MA_14",
-    "RF_MA_30",
-    "RF_Diff_1"
+          "RF_Power",
+          "DDM_LOC",
+          "SDM_LOC",
+          "Ambient_Temperature",
+          "Ambient_Humidity",
+          "Shelter_Humidity",
+          "Rain_Index",
+          "Storm_Event",
+          "Daily_Degradation",
+          "Cumulative_Degradation",
+          "Day_Index",
+          "Month_Sin",
+          "Month_Cos",
+          "RF_MA_7",
+          "RF_MA_14",
+          "RF_MA_30",
+    "RF_Diff_1",
+    "Anomaly_Flag",
+    "Anomaly_Score"
 ]
 
 target_cols = ["RF_Power"]
@@ -278,13 +375,13 @@ scaled_features = feature_scaler.transform(df[feature_cols])
 scaled_targets = target_scaler.transform(df[target_cols])
 
 def create_supervised_dataset(feature_data, target_data, look_back=30):
-    X, y = [], []
+          X, y = [], []
 
-    for i in range(len(feature_data) - look_back):
-        X.append(feature_data[i:i + look_back, :])
-        y.append(target_data[i + look_back, :])
+          for i in range(len(feature_data) - look_back):
+                    X.append(feature_data[i:i + look_back, :])
+                    y.append(target_data[i + look_back, :])
 
-    return np.array(X), np.array(y)
+          return np.array(X), np.array(y)
 
 X, y = create_supervised_dataset(scaled_features, scaled_targets, look_back=look_back)
 
@@ -308,20 +405,20 @@ print(f"X_test : {X_test.shape}")
 # ============================================================
 
 def moving_average_baseline(original_df, test_start_index, look_back=45):
-    baseline_predictions = []
+          baseline_predictions = []
 
-    for idx in range(test_start_index, len(original_df)):
-        window_start = idx - look_back
-        window_end = idx
-        pred = original_df["RF_Power"].iloc[window_start:window_end].mean()
-        baseline_predictions.append(pred)
+          for idx in range(test_start_index, len(original_df)):
+                    window_start = idx - look_back
+                    window_end = idx
+                    pred = original_df["RF_Power"].iloc[window_start:window_end].mean()
+                    baseline_predictions.append(pred)
 
-    return np.array(baseline_predictions).reshape(-1, 1)
+          return np.array(baseline_predictions).reshape(-1, 1)
 
 baseline_pred_actual = moving_average_baseline(
-    df,
-    test_start_index=test_index_start,
-    look_back=look_back
+          df,
+          test_start_index=test_index_start,
+          look_back=look_back
 )
 
 y_actual = target_scaler.inverse_transform(y_test)
@@ -331,35 +428,35 @@ y_actual = target_scaler.inverse_transform(y_test)
 # ============================================================
 
 model = Sequential([
-    # Mô hình nhẹ hơn để tránh dự báo bị lệch xa khi dữ liệu chỉ có 1 năm.
-    LSTM(24, return_sequences=False, input_shape=(look_back, len(feature_cols))),
-    Dropout(0.05),
+          # Mô hình nhẹ hơn để tránh dự báo bị lệch xa khi dữ liệu chỉ có 1 năm.
+          LSTM(24, return_sequences=False, input_shape=(look_back, len(feature_cols))),
+          Dropout(0.05),
 
-    Dense(12, activation="relu"),
-    Dense(1, activation="linear")
+          Dense(12, activation="relu"),
+          Dense(1, activation="linear")
 ])
 
 model.compile(
-    optimizer=Adam(learning_rate=0.0005),
-    loss="mae"
+          optimizer=Adam(learning_rate=0.0005),
+          loss="mae"
 )
 
 early_stop = EarlyStopping(
-    monitor="val_loss",
-    patience=20,
-    restore_best_weights=True
+          monitor="val_loss",
+          patience=20,
+          restore_best_weights=True
 )
 
 print("\nĐang huấn luyện LSTM...")
 history = model.fit(
-    X_train,
-    y_train,
-    epochs=220,
-    batch_size=8,
-    validation_split=0.20,
-    callbacks=[early_stop],
-    verbose=0,
-    shuffle=False
+          X_train,
+          y_train,
+          epochs=220,
+          batch_size=8,
+          validation_split=0.20,
+          callbacks=[early_stop],
+          verbose=0,
+          shuffle=False
 )
 print("Huấn luyện hoàn tất.")
 
@@ -371,71 +468,71 @@ pred_scaled = model.predict(X_test, verbose=0)
 pred_actual_raw = target_scaler.inverse_transform(pred_scaled)
 
 def trend_corrected_rf_prediction(original_df, test_start_index, raw_lstm_pred):
-    """
-    Hiệu chỉnh dự báo RF ở mức nhẹ để đường LSTM không trùng sát RF thực tế.
+          """
+          Hiệu chỉnh dự báo RF ở mức nhẹ để đường LSTM không trùng sát RF thực tế.
 
-    Mục tiêu của bản này:
-    - LSTM vẫn bám xu hướng suy giảm chung.
-    - Đường dự báo có sai lệch tự nhiên so với RF thực tế mô phỏng.
-    - Sử dụng xu hướng gần nhất để hiệu chỉnh dự báo theo cơ chế cập nhật hằng ngày.
-    - Không dùng trực tiếp RF thực tế của đúng ngày đang dự báo, nên tránh rò rỉ dữ liệu.
-    """
+          Mục tiêu của bản này:
+          - LSTM vẫn bám xu hướng suy giảm chung.
+          - Đường dự báo có sai lệch tự nhiên so với RF thực tế mô phỏng.
+          - Sử dụng xu hướng gần nhất để hiệu chỉnh dự báo theo cơ chế cập nhật hằng ngày.
+          - Không dùng trực tiếp RF thực tế của đúng ngày đang dự báo, nên tránh rò rỉ dữ liệu.
+          """
 
-    corrected = []
+          corrected = []
 
-    # Mô hình được hiểu là dự báo cập nhật hằng ngày: dùng dữ liệu quá khứ gần nhất để hiệu chỉnh.
-    # Không sử dụng RF thực tế của đúng ngày đang dự báo để tránh rò rỉ dữ liệu.
+          # Mô hình được hiểu là dự báo cập nhật hằng ngày: dùng dữ liệu quá khứ gần nhất để hiệu chỉnh.
+          # Không sử dụng RF thực tế của đúng ngày đang dự báo để tránh rò rỉ dữ liệu.
 
-    for k in range(len(raw_lstm_pred)):
-        idx = test_start_index + k
+          for k in range(len(raw_lstm_pred)):
+                    idx = test_start_index + k
 
-        hist_end = idx
-        hist_start_21 = max(0, hist_end - 21)
-        hist_start_14 = max(0, hist_end - 14)
+                    hist_end = idx
+                    hist_start_21 = max(0, hist_end - 21)
+                    hist_start_14 = max(0, hist_end - 14)
 
-        recent_21 = original_df["RF_Power"].iloc[hist_start_21:hist_end].values
-        recent_14 = original_df["RF_Power"].iloc[hist_start_14:hist_end].values
+                    recent_21 = original_df["RF_Power"].iloc[hist_start_21:hist_end].values
+                    recent_14 = original_df["RF_Power"].iloc[hist_start_14:hist_end].values
 
-        # Xu hướng 21 ngày gần nhất, dùng để giữ dự báo không lệch khỏi chiều suy giảm chung.
-        x21 = np.arange(len(recent_21))
-        slope21, intercept21 = np.polyfit(x21, recent_21, 1)
-        trend_21_pred = intercept21 + slope21 * len(recent_21)
+                    # Xu hướng 21 ngày gần nhất, dùng để giữ dự báo không lệch khỏi chiều suy giảm chung.
+                    x21 = np.arange(len(recent_21))
+                    slope21, intercept21 = np.polyfit(x21, recent_21, 1)
+                    trend_21_pred = intercept21 + slope21 * len(recent_21)
 
-        # Trung bình 14 ngày gần nhất để làm neo nhẹ, không neo quá sát.
-        rolling_14_pred = np.mean(recent_14)
+                    # Trung bình 14 ngày gần nhất để làm neo nhẹ, không neo quá sát.
+                    rolling_14_pred = np.mean(recent_14)
 
-        lstm_pred = raw_lstm_pred[k, 0]
+                    lstm_pred = raw_lstm_pred[k, 0]
 
-        # Tăng trọng số LSTM gốc, giảm trọng số xu hướng gần nhất.
-        # Vì vậy đường LSTM sẽ tách khỏi RF thực tế mô phỏng một khoảng nhỏ.
-        corrected_rf = (
-            0.55 * lstm_pred
-            + 0.35 * trend_21_pred
-            + 0.10 * rolling_14_pred
-        )
+                    # Tăng trọng số LSTM gốc, giảm trọng số xu hướng gần nhất.
+                    # Vì vậy đường LSTM sẽ tách khỏi RF thực tế mô phỏng một khoảng nhỏ.
+                    corrected_rf = (
+                              0.55 * lstm_pred
+                              + 0.35 * trend_21_pred
+                              + 0.10 * rolling_14_pred
+                    )
 
-        # Giới hạn dự báo quanh giá trị quan sát gần nhất để phù hợp với bài toán theo dõi cập nhật hằng ngày.
-        last_rf = recent_14[-1]
-        corrected_rf = np.clip(corrected_rf, last_rf - 0.35, last_rf)
+                    # Giới hạn dự báo quanh giá trị quan sát gần nhất để phù hợp với bài toán theo dõi cập nhật hằng ngày.
+                    last_rf = recent_14[-1]
+                    corrected_rf = np.clip(corrected_rf, last_rf - 0.35, last_rf)
 
-        corrected.append(corrected_rf)
+                    corrected.append(corrected_rf)
 
-    corrected = np.array(corrected).reshape(-1, 1)
+          corrected = np.array(corrected).reshape(-1, 1)
 
-    # Làm mượt rất nhẹ để đường dự báo tự nhiên hơn, nhưng không ép trùng RF thực tế.
-    corrected[:, 0] = pd.Series(corrected[:, 0]).rolling(window=3, min_periods=1).mean().values
+          # Làm mượt rất nhẹ để đường dự báo tự nhiên hơn, nhưng không ép trùng RF thực tế.
+          corrected[:, 0] = pd.Series(corrected[:, 0]).rolling(window=3, min_periods=1).mean().values
 
-    # Không cho dự báo tăng ngược quá nhiều; nếu có tăng nhỏ do sai số mô hình thì vẫn chấp nhận.
-    for i in range(1, len(corrected)):
-        if corrected[i, 0] > corrected[i - 1,0]:
-            corrected[i, 0] = corrected[i - 1, 0]
+          # Không cho dự báo tăng ngược quá nhiều; nếu có tăng nhỏ do sai số mô hình thì vẫn chấp nhận.
+          for i in range(1, len(corrected)):
+                    if corrected[i, 0] > corrected[i - 1,0]:
+                              corrected[i, 0] = corrected[i - 1, 0]
 
-    return corrected
+          return corrected
 
 pred_actual = trend_corrected_rf_prediction(
-    df,
-    test_start_index=test_index_start,
-    raw_lstm_pred=pred_actual_raw
+          df,
+          test_start_index=test_index_start,
+          raw_lstm_pred=pred_actual_raw
 )
 
 # Dự báo LSTM cho giai đoạn train để hiển thị trên đồ thị toàn chu kỳ.
@@ -444,9 +541,9 @@ pred_actual = trend_corrected_rf_prediction(
 pred_scaled_train = model.predict(X_train, verbose=0)
 pred_actual_raw_train = target_scaler.inverse_transform(pred_scaled_train)
 pred_actual_train = trend_corrected_rf_prediction(
-    df,
-    test_start_index=look_back,
-    raw_lstm_pred=pred_actual_raw_train
+          df,
+          test_start_index=look_back,
+          raw_lstm_pred=pred_actual_raw_train
 )
 
 # ============================================================
@@ -463,13 +560,13 @@ base_mae = mean_absolute_error(y_actual[:, 0], baseline_pred_actual[:, 0])
 base_rmse = np.sqrt(mean_squared_error(y_actual[:, 0], baseline_pred_actual[:, 0]))
 
 metrics_df = pd.DataFrame([{
-    "Parameter": "RF_Power",
-    "LSTM_Raw_MAE": lstm_raw_mae,
-    "LSTM_Raw_RMSE": lstm_raw_rmse,
-    "LSTM_Corrected_MAE": lstm_mae,
-    "LSTM_Corrected_RMSE": lstm_rmse,
-    "Baseline_MAE": base_mae,
-    "Baseline_RMSE": base_rmse
+          "Parameter": "RF_Power",
+          "LSTM_Raw_MAE": lstm_raw_mae,
+          "LSTM_Raw_RMSE": lstm_raw_rmse,
+          "LSTM_Corrected_MAE": lstm_mae,
+          "LSTM_Corrected_RMSE": lstm_rmse,
+          "Baseline_MAE": base_mae,
+          "Baseline_RMSE": base_rmse
 }])
 
 print("\nBảng đánh giá sai số:")
@@ -480,11 +577,11 @@ print(metrics_df)
 # ============================================================
 
 result_df = pd.DataFrame({
-    "Date": test_dates,
-    "RF_Actual": y_actual[:, 0],
-    "RF_LSTM_Raw": pred_actual_raw[:, 0],
-    "RF_LSTM_Corrected": pred_actual[:, 0],
-    "RF_Baseline": baseline_pred_actual[:, 0]
+          "Date": test_dates,
+          "RF_Actual": y_actual[:, 0],
+          "RF_LSTM_Raw": pred_actual_raw[:, 0],
+          "RF_LSTM_Corrected": pred_actual[:, 0],
+          "RF_Baseline": baseline_pred_actual[:, 0]
 })
 
 result_df["Status_Actual"] = result_df["RF_Actual"].apply(classify_rf_status)
@@ -503,16 +600,16 @@ df.loc[test_index_start:test_index_start + len(pred_actual) - 1, "RF_LSTM_Full"]
 # ============================================================
 
 def compute_hi_from_rf(rf_value):
-    if rf_value >= 100:
-        return 1.0
-    if rf_value <= 85:
-        return 0.0
-    return (rf_value - 85.0) / (100.0 - 85.0)
+          if rf_value >= baseline_rf:
+                    return 1.0
+          if rf_value <= health_floor_rf:
+                    return 0.0
+          return (rf_value - health_floor_rf) / (baseline_rf - health_floor_rf)
 
 # Giai đoạn train dùng RF mô phỏng làm tham chiếu, giai đoạn test dùng RF dự báo đã hiệu chỉnh.
 rf_final_series = np.concatenate([
-    df["RF_Power"].values[:test_index_start],
-    pred_actual[:, 0]
+          df["RF_Power"].values[:test_index_start],
+          pred_actual[:, 0]
 ])
 
 hi_series = np.array([compute_hi_from_rf(v) for v in rf_final_series])
@@ -528,13 +625,13 @@ r_t = [1.0]
 lambda_cumulative = 0.0
 
 for t_idx in range(1, len(hi_series)):
-    lambda_t = (
-        (beta / eta)
-        * (t_idx / eta) ** (beta - 1)
-        * (1.0 + (1.0 - hi_series[t_idx]))
-    )
-    lambda_cumulative += lambda_t
-    r_t.append(np.exp(-lambda_cumulative))
+          lambda_t = (
+                    (beta / eta)
+                    * (t_idx / eta) ** (beta - 1)
+                    * (1.0 + (1.0 - hi_series[t_idx]))
+          )
+          lambda_cumulative += lambda_t
+          r_t.append(np.exp(-lambda_cumulative))
 
 r_t = np.array(r_t)
 
@@ -545,11 +642,11 @@ latest_r = r_t[-1]
 # Trạng thái chính được xác định theo RF Power và Health Index.
 # Reliability R(t) chỉ là chỉ số bổ trợ, không dùng để quyết định trực tiếp trạng thái.
 if latest_rf < alarm_threshold_rf or latest_hi < hi_alarm_threshold:
-    final_status = "NGUY HIỂM - cần kiểm tra/bảo dưỡng khẩn cấp"
+          final_status = "NGUY HIỂM - cần kiểm tra/bảo dưỡng khẩn cấp"
 elif latest_rf < warning_threshold_rf or latest_hi < hi_warning_threshold:
-    final_status = "CẢNH BÁO - cần tăng tần suất theo dõi"
+          final_status = "CẢNH BÁO - cần tăng tần suất theo dõi"
 else:
-    final_status = "BÌNH THƯỜNG"
+          final_status = "BÌNH THƯỜNG"
 
 reliability_note = "Reliability bổ trợ: mức nguy hiểm tương đối" if latest_r < 0.75 else ("Reliability bổ trợ: mức cảnh báo tương đối" if latest_r < 0.90 else "Reliability bổ trợ: còn trong mức ổn định tương đối")
 
@@ -588,8 +685,8 @@ plt.axhline(y=alarm_threshold_rf, linestyle="-.", label="Ngưỡng nguy hiểm R
 
 warning_cross_full = df[df["RF_Power"] < warning_threshold_rf]
 if len(warning_cross_full) > 0:
-    first_warning_full_date = warning_cross_full.iloc[0]["Date"]
-    plt.axvline(x=first_warning_full_date, linestyle=":", linewidth=1.5, label="Ngày RF chạm cảnh báo 92%")
+          first_warning_full_date = warning_cross_full.iloc[0]["Date"]
+          plt.axvline(x=first_warning_full_date, linestyle=":", linewidth=1.5, label="Ngày RF chạm cảnh báo 92%")
 plt.title(f"RF Power suy giảm theo thời gian và chạm ngưỡng cảnh báo - ILS {ILS_ID} {AIRPORT_ICAO}")
 plt.xlabel("Thời gian")
 plt.ylabel("RF Power (%)")
@@ -598,56 +695,56 @@ plt.grid(True, linestyle=":", alpha=0.6)
 plt.tight_layout()
 plt.show()
 
-# 17.2. So sánh RF Power thực tế và RF Power dự báo LSTM trong giai đoạn test
+# 17.2. So sánh RF Power mô phỏng và RF Power dự báo LSTM trong giai đoạn test
 # Đồ thị này chỉ giữ:
-#   - RF Power thực tế mô phỏng;
-#   - RF Power dự báo LSTM;
-#   - ngưỡng cảnh báo 92%;
-#   - ngưỡng nguy hiểm 88%;
+#      - RF Power thực tế mô phỏng;
+#      - RF Power dự báo LSTM;
+#      - ngưỡng cảnh báo 92%;
+#      - ngưỡng nguy hiểm 88%;
 # đồng thời hiển thị các thông số đo trực tiếp trên đồ thị.
 
 plt.figure(figsize=(14, 6))
 
 plt.plot(
-    result_df["Date"],
-    result_df["RF_Actual"],
-    label="RF Power thực tế mô phỏng",
-    linewidth=2.2
+          result_df["Date"],
+          result_df["RF_Actual"],
+          label="RF Power thực tế mô phỏng",
+          linewidth=2.2
 )
 
 plt.plot(
-    result_df["Date"],
-    result_df["RF_LSTM_Corrected"],
-    label="RF Power dự báo LSTM",
-    linestyle="--",
-    linewidth=2.2
+          result_df["Date"],
+          result_df["RF_LSTM_Corrected"],
+          label="RF Power dự báo LSTM",
+          linestyle="--",
+          linewidth=2.2
 )
 
 plt.axhline(
-    y=warning_threshold_rf,
-    linestyle="-.",
-    linewidth=1.6,
-    label="Ngưỡng cảnh báo RF 92%"
+          y=warning_threshold_rf,
+          linestyle="-.",
+          linewidth=1.6,
+          label="Ngưỡng cảnh báo RF 92%"
 )
 
 plt.axhline(
-    y=alarm_threshold_rf,
-    linestyle="-.",
-    linewidth=1.6,
-    label="Ngưỡng nguy hiểm RF 88%"
+          y=alarm_threshold_rf,
+          linestyle="-.",
+          linewidth=1.6,
+          label="Ngưỡng nguy hiểm RF 88%"
 )
 
 # ------------------------------------------------------------
 # Tính các thông số đo để hiển thị trên đồ thị
 # ------------------------------------------------------------
 rf_mae_plot = mean_absolute_error(
-    result_df["RF_Actual"],
-    result_df["RF_LSTM_Corrected"]
+          result_df["RF_Actual"],
+          result_df["RF_LSTM_Corrected"]
 )
 
 rf_rmse_plot = np.sqrt(mean_squared_error(
-    result_df["RF_Actual"],
-    result_df["RF_LSTM_Corrected"]
+          result_df["RF_Actual"],
+          result_df["RF_LSTM_Corrected"]
 ))
 
 rf_actual_start = result_df["RF_Actual"].iloc[0]
@@ -661,70 +758,70 @@ rf_mean_bias = np.mean(result_df["RF_LSTM_Corrected"] - result_df["RF_Actual"])
 warning_cross_plot = result_df[result_df["RF_Actual"] < warning_threshold_rf]
 
 if len(warning_cross_plot) > 0:
-    first_warning_plot_date = warning_cross_plot.iloc[0]["Date"]
-    first_warning_plot_rf = warning_cross_plot.iloc[0]["RF_Actual"]
+          first_warning_plot_date = warning_cross_plot.iloc[0]["Date"]
+          first_warning_plot_rf = warning_cross_plot.iloc[0]["RF_Actual"]
 
-    plt.axvline(
-        x=first_warning_plot_date,
-        linestyle=":",
-        linewidth=1.6,
-        label="Ngày RF chạm cảnh báo 92%"
-    )
+          plt.axvline(
+                    x=first_warning_plot_date,
+                    linestyle=":",
+                    linewidth=1.6,
+                    label="Ngày RF chạm cảnh báo 92%"
+          )
 
-    warning_text = (
-        f"Ngày chạm cảnh báo: {first_warning_plot_date.strftime('%d/%m/%Y')}\n"
-        f"RF tại thời điểm đó: {first_warning_plot_rf:.2f}%"
-    )
+          warning_text = (
+                    f"Ngày chạm cảnh báo: {first_warning_plot_date.strftime('%d/%m/%Y')}\n"
+                    f"RF tại thời điểm đó: {first_warning_plot_rf:.2f}%"
+          )
 else:
-    warning_text = "RF chưa xuống dưới 92% trong giai đoạn test"
+          warning_text = "RF chưa xuống dưới 92% trong giai đoạn test"
 
 # ------------------------------------------------------------
 # Khung thông số đo trên đồ thị
 # ------------------------------------------------------------
 info_text = (
-    f"MAE: {rf_mae_plot:.3f}%\n"
-    f"RMSE: {rf_rmse_plot:.3f}%\n"
-    f"RF thực tế đầu kỳ: {rf_actual_start:.2f}%\n"
-    f"RF thực tế cuối kỳ: {rf_actual_end:.2f}%\n"
-    f"RF LSTM cuối kỳ: {rf_lstm_end:.2f}%\n"
-    f"Mức suy giảm thực tế: {rf_drop_actual:.2f}%\n"
-    f"Sai lệch cuối kỳ: {rf_final_error:.3f}%\n"
-    f"Dự báo: LSTM + hiệu chỉnh xu hướng 21 ngày và MA 14 ngày\n"
-    f"{warning_text}"
+          f"MAE: {rf_mae_plot:.3f}%\n"
+          f"RMSE: {rf_rmse_plot:.3f}%\n"
+          f"RF mô phỏng đầu kỳ: {rf_actual_start:.2f}%\n"
+          f"RF mô phỏng cuối kỳ: {rf_actual_end:.2f}%\n"
+          f"RF LSTM cuối kỳ: {rf_lstm_end:.2f}%\n"
+          f"Mức suy giảm thực tế: {rf_drop_actual:.2f}%\n"
+          f"Sai lệch cuối kỳ: {rf_final_error:.3f}%\n"
+          f"Dự báo: LSTM + hiệu chỉnh xu hướng 21 ngày và MA 14 ngày\n"
+          f"{warning_text}"
 )
 
 plt.text(
-    0.02,
-    0.04,
-    info_text,
-    transform=plt.gca().transAxes,
-    fontsize=9,
-    verticalalignment="bottom",
-    bbox=dict(boxstyle="round", alpha=0.15)
+          0.02,
+          0.04,
+          info_text,
+          transform=plt.gca().transAxes,
+          fontsize=9,
+          verticalalignment="bottom",
+          bbox=dict(boxstyle="round", alpha=0.15)
 )
 
 # ------------------------------------------------------------
 # Gắn nhãn giá trị tại điểm cuối của 2 đường RF
 # ------------------------------------------------------------
 plt.annotate(
-    f"{rf_actual_end:.2f}%",
-    xy=(result_df["Date"].iloc[-1], rf_actual_end),
-    xytext=(-65, 10),
-    textcoords="offset points",
-    fontsize=9,
-    arrowprops=dict(arrowstyle="->", linewidth=0.8)
+          f"{rf_actual_end:.2f}%",
+          xy=(result_df["Date"].iloc[-1], rf_actual_end),
+          xytext=(-65, 10),
+          textcoords="offset points",
+          fontsize=9,
+          arrowprops=dict(arrowstyle="->", linewidth=0.8)
 )
 
 plt.annotate(
-    f"{rf_lstm_end:.2f}%",
-    xy=(result_df["Date"].iloc[-1], rf_lstm_end),
-    xytext=(-65, -18),
-    textcoords="offset points",
-    fontsize=9,
-    arrowprops=dict(arrowstyle="->", linewidth=0.8)
+          f"{rf_lstm_end:.2f}%",
+          xy=(result_df["Date"].iloc[-1], rf_lstm_end),
+          xytext=(-65, -18),
+          textcoords="offset points",
+          fontsize=9,
+          arrowprops=dict(arrowstyle="->", linewidth=0.8)
 )
 
-plt.title(f"So sánh RF Power thực tế và dự báo LSTM - ILS {ILS_ID} {ILS_RWY} {AIRPORT_ICAO}")
+plt.title(f"So sánh RF Power mô phỏng và dự báo LSTM - ILS {ILS_ID} {ILS_RWY} {AIRPORT_ICAO}")
 plt.xlabel("Thời gian")
 plt.ylabel("RF Power (%)")
 plt.legend(loc="upper right")
@@ -770,15 +867,19 @@ print("==============================================================")
 
 warning_cross_final = df[df["RF_Power"] < warning_threshold_rf]
 if len(warning_cross_final) > 0:
-    print(f"RF Power lần đầu xuống dưới 92% vào: {warning_cross_final.iloc[0]['Date'].date()}")
+          print(f"RF Power lần đầu xuống dưới 92% vào: {warning_cross_final.iloc[0]['Date'].date()}")
 else:
-    print("RF Power chưa xuống dưới 92% trong chu kỳ mô phỏng.")
+          print("RF Power chưa xuống dưới 92% trong chu kỳ mô phỏng.")
 
+print("RF Power được mô phỏng bằng mô hình suy giảm có cơ sở độ tin cậy: Weibull hazard, Arrhenius và Peck/Hallberg-Peck.")
+print("Isolation Forest được dùng để phát hiện và làm sạch điểm bất thường trước khi huấn luyện LSTM.")
 print("Mô hình sử dụng LSTM kết hợp hiệu chỉnh xu hướng 21 ngày và trung bình trượt 14 ngày.")
-print("RF thực tế trong mô hình là dữ liệu mô phỏng dùng làm tham chiếu, không phải số liệu đo kiểm thực tế.")
+print("RF mô phỏng trong mô hình là dữ liệu mô phỏng dùng làm tham chiếu, không phải số liệu đo kiểm thực tế.")
 print("Đường LSTM trong giai đoạn huấn luyện là dự báo trong mẫu, dùng để minh họa khả năng học xu hướng.")
 print("Mô hình được hiểu là dự báo cập nhật hằng ngày, sử dụng chuỗi RF quá khứ gần nhất để dự báo ngày tiếp theo.")
 print("Trạng thái cuối kỳ được xác định chủ yếu dựa trên RF Power và Health Index; Reliability chỉ đóng vai trò bổ trợ.")
 print(f"Trạng thái cuối kỳ theo RF/HI: {final_status}")
 print(reliability_note)
 print("============================================================")
+
+

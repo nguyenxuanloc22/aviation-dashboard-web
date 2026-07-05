@@ -1,3 +1,14 @@
+// Helper to convert day index (1-365) to solar calendar date DD/MM/YYYY in 2026
+const formatDayToDate = (day) => {
+    if (!day) return '';
+    const date = new Date(2026, 0, 1);
+    date.setDate(date.getDate() + (day - 1));
+    const d = String(date.getDate()).padStart(2, '0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+};
+
 // ============================================================
 //  KPI SUMMARY CARDS (4-column row)
 //  Props:
@@ -67,7 +78,7 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                 <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-50">
                     <div className="font-semibold text-slate-700">{statusText}</div>
                     <div className="mt-1 text-[10px] text-slate-400">
-                        Chạm cảnh báo (92%): {firstWarningDay ? <span className="text-amber-600 font-bold">Ngày {firstWarningDay}</span> : "Không"}
+                        Chạm cảnh báo (92%): {firstWarningDay ? <span className="text-amber-600 font-bold">{formatDayToDate(firstWarningDay)} (Ngày {firstWarningDay})</span> : "Không"}
                     </div>
                 </div>
             </div>
@@ -114,7 +125,7 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                 <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-50 leading-normal">
                     Chỉ số sức khỏe HI cuối: <span className="font-semibold text-slate-700">{lastHI.toFixed(2)}</span>
                     <div className="text-[10px] text-slate-400">
-                        Chạm mức nguy cấp: {firstCriticalDay ? <span className="text-red-500 font-semibold">Ngày {firstCriticalDay}</span> : "Không"}
+                        Chạm mức nguy cấp: {firstCriticalDay ? <span className="text-red-500 font-semibold">{formatDayToDate(firstCriticalDay)} (Ngày {firstCriticalDay})</span> : "Không"}
                     </div>
                 </div>
             </div>

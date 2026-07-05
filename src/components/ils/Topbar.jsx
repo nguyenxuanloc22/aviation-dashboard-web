@@ -1,5 +1,16 @@
 import { Activity, RefreshCw, Calendar, Info, TrendingDown, ChevronDown } from 'lucide-react';
 
+// Helper to convert day index (1-365) to solar calendar date DD/MM/YYYY in 2026
+const formatDayToDate = (day) => {
+    if (!day) return '';
+    const date = new Date(2026, 0, 1);
+    date.setDate(date.getDate() + (day - 1));
+    const d = String(date.getDate()).padStart(2, '0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+};
+
 // ============================================================
 //  TOPBAR / TASKBAR
 //  Props:
@@ -34,43 +45,42 @@ export default function Topbar({
     hasUnsavedChanges,
 }) {
     return (
-        <header className="bg-white border-b border-slate-200 h-14 flex items-center pr-6 gap-3 flex-shrink-0 shadow-sm z-10">
-            {/* Brand Logo & Name Box in Soft Sea Blue */}
-            <div className="bg-[#E2EFFC] border-r border-blue-200/50 px-5 h-full flex items-center gap-3 flex-shrink-0 rounded-r-xl shadow-xs">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white text-base font-bold shadow-md shadow-blue-200 flex-shrink-0">
-                    <Activity size={18} />
+        <header className="bg-white border-b border-sky-100 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm z-30 relative">
+            <div className="flex items-center gap-3">
+                <div className="bg-blue-600 text-white p-2 rounded-xl shadow-md shadow-blue-500/20 flex items-center justify-center">
+                    <Activity size={20} className="animate-[pulse_2s_infinite]" />
                 </div>
-                <div className="min-w-0">
-                    <span className="block text-xs font-extrabold text-blue-900 tracking-wider uppercase truncate">Hệ Thống Giám Sát ILS</span>
-                    <span className="block text-[9px] font-bold text-blue-700 tracking-wide truncate">Mạng LSTM + Weibull</span>
+                <div>
+                    <h1 className="text-sm font-black text-slate-800 tracking-wide flex items-center gap-1.5 uppercase">
+                        Hệ thống giám sát ILS
+                        <span className="text-[9px] bg-sky-50 text-blue-600 border border-blue-100 rounded px-1.5 py-0.5 tracking-normal">
+                            Mạng LSTM + Weibull
+                        </span>
+                    </h1>
+                    <p className="text-[10px] text-slate-400 font-bold tracking-wider mt-0.5 uppercase">
+                        Giám sát &amp; dự báo bảo trì thiết bị đài dẫn đường hàng không
+                    </p>
                 </div>
             </div>
 
-            <div className="min-w-0 hidden lg:block">
-                <span className="block text-[10px] text-slate-500 font-medium">Giám sát & dự báo bảo trì thiết bị đài dẫn đường hàng không</span>
-            </div>
+            <div className="flex flex-wrap items-center gap-3">
 
-            <div className="flex-1" />
-
-            {/* Actions Section in Header Right */}
-            <div className="flex items-center gap-2.5 flex-shrink-0">
-
-                {/* Forecast Milestones Dropdown Button */}
-                <div className="relative hidden sm:block">
+                {/* Forecast Milestones Dropdown */}
+                <div className="relative">
                     <button
                         onClick={() => { setShowMilestonesDropdown(v => !v); setPulseMilestones(false); }}
-                        className={`px-3 py-1.5 border rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 relative ${
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
                             pulseMilestones
-                                ? 'bg-violet-50 border-violet-300 text-violet-700 shadow-md shadow-violet-100 animate-pulse ring-2 ring-violet-300 ring-offset-1'
-                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                                ? 'bg-violet-600 text-white border-violet-500 shadow-md shadow-violet-500/20 animate-pulse'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                         }`}
                     >
-                        <TrendingDown size={14} className={pulseMilestones ? 'text-violet-600' : 'text-slate-500'} />
+                        <Calendar size={14} />
                         <span>Mốc dự báo</span>
                         {pulseMilestones && (
-                            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500" />
+                            <span className="flex h-2 w-2 relative">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                             </span>
                         )}
                         <ChevronDown size={12} className={`transition-transform duration-200 ${showMilestonesDropdown ? 'rotate-180' : ''}`} />
@@ -84,7 +94,7 @@ export default function Topbar({
                                 className="fixed inset-0 z-[50]"
                                 onClick={() => setShowMilestonesDropdown(false)}
                             />
-                            <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-[51] overflow-hidden">
+                            <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-[51] overflow-hidden">
                                 {/* Dropdown Header */}
                                 <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-100 flex items-center gap-2">
                                     <TrendingDown size={14} className="text-blue-600" />
@@ -95,28 +105,28 @@ export default function Topbar({
                                     {[
                                         {
                                             label: 'R(t) < 90% lần đầu',
-                                            val: warnDay90 ? `Ngày thứ ${warnDay90}` : 'Không chạm',
+                                            val: warnDay90 ? `${formatDayToDate(warnDay90)} (Ngày thứ ${warnDay90})` : 'Không chạm',
                                             hit: !!warnDay90,
                                             color: 'amber',
                                             desc: 'Độ tin cậy bắt đầu suy giảm — cần lên kế hoạch bảo trì phòng ngừa.',
                                         },
                                         {
                                             label: 'R(t) < 75% (nguy hiểm)',
-                                            val: dangerDay75 ? `Ngày thứ ${dangerDay75}` : 'Không chạm',
+                                            val: dangerDay75 ? `${formatDayToDate(dangerDay75)} (Ngày thứ ${dangerDay75})` : 'Không chạm',
                                             hit: !!dangerDay75,
                                             color: 'red',
                                             desc: 'Hệ thống tiếp cận ngưỡng nguy hiểm — nguy cơ hỏng hóc cao.',
                                         },
                                         {
                                             label: 'RF dưới ngưỡng dừng đài',
-                                            val: estopDay ? `Ngày thứ ${estopDay}` : 'Không chạm',
+                                            val: estopDay ? `${formatDayToDate(estopDay)} (Ngày thứ ${estopDay})` : 'Không chạm',
                                             hit: !!estopDay,
                                             color: 'red',
                                             desc: `Công suất phát RF sẽ rơi xuống dưới ${activeParams.alarmThreshold}% — cần dừng đài khẩn cấp.`,
                                         },
                                         {
                                             label: 'Bắt đầu dự báo AI (LSTM)',
-                                            val: `Ngày thứ ${splitIdx + 1}`,
+                                            val: `${formatDayToDate(splitIdx + 1)} (Ngày thứ ${splitIdx + 1})`,
                                             hit: true,
                                             color: 'violet',
                                             desc: 'Mạng LSTM bắt đầu dự báo thay thế dữ liệu thực tế từ mốc này.',
@@ -131,9 +141,9 @@ export default function Topbar({
                                                 'bg-slate-50 border-slate-100'
                                             }`}
                                         >
-                                            <div className="flex items-center justify-between mb-1">
+                                            <div className="flex flex-col gap-1 mb-1">
                                                 <span className="font-semibold text-slate-700">{item.label}</span>
-                                                <span className={`font-extrabold text-[10px] px-1.5 py-0.5 rounded ${
+                                                <span className={`font-extrabold text-[10px] px-1.5 py-0.5 rounded self-start ${
                                                     item.color === 'red'    ? 'text-red-700 bg-red-100' :
                                                     item.color === 'amber' ? 'text-amber-700 bg-amber-100' :
                                                     item.color === 'violet'? 'text-violet-700 bg-violet-100' :

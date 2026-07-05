@@ -4,6 +4,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { runSimulation, generateSimulationLogs, DEFAULT_PARAMS, removeVietnameseTones } from '../simulation/engine';
 
 // Modular UI components
+// Modular UI components
 import Toast            from './ils/Toast';
 import LogsDrawer       from './ils/LogsDrawer';
 import Topbar           from './ils/Topbar';
@@ -11,6 +12,17 @@ import Sidebar          from './ils/Sidebar';
 import KpiCards         from './ils/KpiCards';
 import ChartViewToolbar from './ils/ChartViewToolbar';
 import ChartsArea       from './ils/ChartsArea';
+
+// Helper to convert day index (1-365) to solar calendar date DD/MM/YYYY in 2026
+const formatDayToDate = (day) => {
+    if (!day) return '';
+    const date = new Date(2026, 0, 1);
+    date.setDate(date.getDate() + (day - 1));
+    const d = String(date.getDate()).padStart(2, '0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+};
 
 // ============================================================
 //  MAIN DASHBOARD
@@ -206,10 +218,11 @@ export default function ILSMonitorDashboard() {
         
         const { firstCriticalDay } = metrics;
         if (firstCriticalDay) {
+            const dateStr = formatDayToDate(firstCriticalDay);
             addToast(
                 'critical', 
-                'Cảnh báo chạm ngưỡng nguy hiểm', 
-                `⚠️ CẢNH BÁO: Thiết bị sẽ chạm mức nguy hiểm vào Ngày thứ ${firstCriticalDay}. Yêu cầu lập kế hoạch thay thế hoặc kích hoạt hệ thống dự phòng!`
+                'Cần bảo trì và bảo dưỡng', 
+                `⚠️ THÔNG TIN: Thiết bị cần bảo trì bảo dưỡng trước ngày ${dateStr} (Ngày thứ ${firstCriticalDay}) để đảm bảo hoạt động an toàn và tránh chạm ngưỡng nguy hiểm.`
             );
         } else {
             addToast(
@@ -224,6 +237,7 @@ export default function ILSMonitorDashboard() {
         <div className="min-h-screen bg-[#F0F5FA] text-slate-800 font-sans flex flex-col">
             <style>{`
                 @keyframes toastIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+                @keyframes shrinkBar { from { width: 100%; } to { width: 0%; } }
                 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
                 input[type=number]::-webkit-inner-spin-button { opacity:0.3; }
                 input[type=number]:focus { border-color:#3b82f6 !important; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15); }
