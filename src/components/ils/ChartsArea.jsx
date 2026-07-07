@@ -95,8 +95,8 @@ export default function ChartsArea({
                                         label={{ value: 'Bắt đầu AI', fill: '#8B5CF6', fontSize: 9, position: 'insideTopLeft' }} 
                                     />
 
-                                    <Line type="monotone" dataKey="rfActual" name="Thực tế mô phỏng" stroke="#1D4ED8" strokeWidth={2.2} dot={false} />
-                                    <Line type="monotone" dataKey="rfAI" name="Dự báo LSTM + Hiệu chỉnh" stroke="#8B5CF6" strokeWidth={2.2} strokeDasharray="5 3" dot={false} connectNulls={true} />
+                                    <Line type="monotone" dataKey="rfActual" name="Thực tế mô phỏng" stroke="#2563EB" strokeWidth={3.5} dot={false} />
+                                    <Line type="monotone" dataKey="rfAI" name="Dự báo LSTM + Hiệu chỉnh" stroke="#EA580C" strokeWidth={3.5} strokeDasharray="6 4" dot={false} connectNulls={true} />
                                     
                                     <Brush 
                                         dataKey="day" 
@@ -150,9 +150,9 @@ export default function ChartsArea({
                                         <ReferenceLine y={activeParams.alarmThreshold} stroke="#EF4444" strokeDasharray="4 4" />
                                         <ReferenceLine y={activeParams.warningThreshold} stroke="#F59E0B" strokeDasharray="4 4" />
 
-                                        <Line type="monotone" dataKey="rfActual" name="Thực tế" stroke="#1D4ED8" strokeWidth={2.2} dot={false} />
-                                        <Line type="monotone" dataKey="rfAI" name="Dự báo LSTM" stroke="#8B5CF6" strokeWidth={2.2} strokeDasharray="5 3" dot={false} />
-                                        <Line type="monotone" dataKey="rfBaseline" name="Baseline MA" stroke="#94A3B8" strokeWidth={1.5} strokeDasharray="3 3" dot={false} />
+                                        <Line type="monotone" dataKey="rfActual" name="Thực tế" stroke="#2563EB" strokeWidth={3.5} dot={false} />
+                                        <Line type="monotone" dataKey="rfAI" name="Dự báo LSTM" stroke="#EA580C" strokeWidth={3.5} strokeDasharray="6 4" dot={false} />
+                                        <Line type="monotone" dataKey="rfBaseline" name="Baseline MA" stroke="#64748B" strokeWidth={2} strokeDasharray="4 4" dot={false} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
@@ -217,7 +217,7 @@ export default function ChartsArea({
                                     <Tooltip content={<ChartTooltip />} />
                                     <ReferenceLine y={0.70} stroke="#F59E0B" strokeDasharray="5 5" label={{ value: 'Cảnh báo: 0.7', fill: '#F59E0B', fontSize: 9, position: 'right' }} />
                                     <ReferenceLine y={0.30} stroke="#EF4444" strokeDasharray="5 5" label={{ value: 'Nguy cấp: 0.3', fill: '#EF4444', fontSize: 9, position: 'right' }} />
-                                    <Line type="monotone" dataKey="hi" name="Health Index HI" stroke="#8B5CF6" strokeWidth={2.2} dot={false} />
+                                    <Line type="monotone" dataKey="hi" name="Health Index HI" stroke="#7C3AED" strokeWidth={3.5} dot={false} />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
@@ -237,7 +237,7 @@ export default function ChartsArea({
                                     <ReferenceLine y={0.90} stroke="#F59E0B" strokeDasharray="4 4" label={{ value: 'Cảnh báo: 0.90', fill: '#F59E0B', fontSize: 9, position: 'right' }} />
                                     <ReferenceLine y={0.75} stroke="#EF4444" strokeDasharray="4 4" label={{ value: 'Nguy hiểm: 0.75', fill: '#EF4444', fontSize: 9, position: 'right' }} />
                                     {dangerDay75 && <ReferenceLine x={dangerDay75} stroke="#EF444433" strokeDasharray="3 3" label={{ value: `R<0.75: Ngày ${dangerDay75}`, fill: '#EF4444', fontSize: 8 }} />}
-                                    <Line type="monotone" dataKey="rt" name="Độ tin cậy R(t)" stroke="#10B981" strokeWidth={2.2} dot={false} />
+                                    <Line type="monotone" dataKey="rt" name="Độ tin cậy R(t)" stroke="#059669" strokeWidth={3.5} dot={false} />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
@@ -278,7 +278,7 @@ export default function ChartsArea({
                                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 5 }} />
                                 <ReferenceLine y={activeParams.vswrWarningThreshold} stroke="#F59E0B" strokeDasharray="4 4" label={{ value: `Cảnh báo: ${activeParams.vswrWarningThreshold}`, fill: '#F59E0B', fontSize: 9, position: 'right' }} />
                                 <ReferenceLine y={activeParams.vswrAlarmThreshold} stroke="#EF4444" strokeDasharray="4 4" label={{ value: `Dừng đài: ${activeParams.vswrAlarmThreshold}`, fill: '#EF4444', fontSize: 9, position: 'right' }} />
-                                <Line type="monotone" dataKey="vswr" name="Hệ số sóng đứng VSWR" stroke="#10B981" strokeWidth={2.2} dot={false} />
+                                <Line type="monotone" dataKey="vswr" name="Hệ số sóng đứng VSWR" stroke="#C026D3" strokeWidth={3.5} dot={false} />
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
@@ -300,9 +300,9 @@ export default function ChartsArea({
                             <YAxis yAxisId="hum" orientation="right" tick={{ fill: '#06B6D4', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} width={36} />
                             <Tooltip content={<ChartTooltip />} />
                             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 5 }} />
-                            <Line yAxisId="temp" type="monotone" dataKey="temp" name="Nhiệt độ (°C)" stroke="#F97316" strokeWidth={1.5} dot={false} />
-                            <Line yAxisId="hum" type="monotone" dataKey="humidity" name="Độ ẩm không khí (%)" stroke="#06B6D4" strokeWidth={1.5} dot={false} />
-                            <Line yAxisId="hum" type="monotone" dataKey="shelterHum" name="Độ ẩm trong trạm (%)" stroke="#0EA5E9" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+                            <Line yAxisId="temp" type="monotone" dataKey="temp" name="Nhiệt độ (°C)" stroke="#F97316" strokeWidth={2.5} dot={false} />
+                            <Line yAxisId="hum" type="monotone" dataKey="humidity" name="Độ ẩm không khí (%)" stroke="#0891B2" strokeWidth={2.5} dot={false} />
+                            <Line yAxisId="hum" type="monotone" dataKey="shelterHum" name="Độ ẩm trong trạm (%)" stroke="#2563EB" strokeWidth={2.5} strokeDasharray="4 3" dot={false} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
