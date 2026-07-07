@@ -1,15 +1,5 @@
 import { Calendar, Info, Search, Copy, Check, AlertTriangle, AlertCircle } from 'lucide-react';
 
-const formatDayToDate = (day) => {
-    if (!day) return '';
-    const date = new Date(2026, 0, 1);
-    date.setDate(date.getDate() + (day - 1));
-    const d = date.getDate();
-    const m = date.getMonth() + 1;
-    const y = date.getFullYear();
-    return `${d}/${m}/${y}`;
-};
-
 // ============================================================
 //  WARNING LOGS DRAWER
 //  Props:
@@ -46,23 +36,22 @@ export default function LogsDrawer({
         <>
             {/* WARNING LOGS DRAWER OVERLAY BACKDROP */}
             {showLogsDrawer && (
-                <div 
+                <div
                     className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-[990] transition-opacity duration-300"
                     onClick={() => setShowLogsDrawer(false)}
                 />
             )}
 
             {/* WARNING LOGS DRAWER */}
-            <div className={`fixed inset-y-0 right-0 z-[999] w-80 sm:w-96 bg-white border-l border-slate-200 shadow-2xl flex flex-col transition-transform duration-300 transform ${
-                showLogsDrawer ? 'translate-x-0' : 'translate-x-full'
-            }`}>
+            <div className={`fixed inset-y-0 right-0 z-[999] w-80 sm:w-96 bg-white border-l border-slate-200 shadow-2xl flex flex-col transition-transform duration-300 transform ${showLogsDrawer ? 'translate-x-0' : 'translate-x-full'
+                }`}>
                 {/* Drawer Header */}
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 flex-shrink-0">
                     <span className="font-bold text-xs text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                         <Calendar size={14} className="text-blue-600" />
                         Nhật ký cảnh báo ({rawSimulationLogs.length})
                     </span>
-                    <button 
+                    <button
                         onClick={() => setShowLogsDrawer(false)}
                         className="text-slate-400 hover:text-slate-600 p-1 font-bold text-sm"
                     >
@@ -74,7 +63,7 @@ export default function LogsDrawer({
                 <div className="p-4 border-b border-slate-100 bg-white space-y-3 flex-shrink-0">
                     {/* Search query */}
                     <div className="relative">
-                        <input 
+                        <input
                             type="text"
                             placeholder="Tìm kiếm nội dung cảnh báo..."
                             value={logSearchQuery}
@@ -94,11 +83,10 @@ export default function LogsDrawer({
                             <button
                                 key={tab.id}
                                 onClick={() => setLogFilter(tab.id)}
-                                className={`flex-1 py-1 px-2 border rounded-md text-[10px] font-bold transition-all cursor-pointer text-center ${
-                                    logFilter === tab.id
+                                className={`flex-1 py-1 px-2 border rounded-md text-[10px] font-bold transition-all cursor-pointer text-center ${logFilter === tab.id
                                         ? tab.activeColor || 'text-blue-700 bg-blue-50 border-blue-200'
                                         : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-                                }`}
+                                    }`}
                             >
                                 {tab.label} ({tab.count})
                             </button>
@@ -125,11 +113,10 @@ export default function LogsDrawer({
                         {rawSimulationLogs.length > 0 && (
                             <button
                                 onClick={handleCopyLogs}
-                                className={`px-2 py-1 rounded text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
-                                    copiedLogs 
-                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-600' 
+                                className={`px-2 py-1 rounded text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${copiedLogs
+                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
                                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                                }`}
+                                    }`}
                             >
                                 {copiedLogs ? <Check size={10} /> : <Copy size={10} />}
                                 {copiedLogs ? 'Đã sao chép!' : 'Sao chép nhật ký'}
@@ -145,7 +132,7 @@ export default function LogsDrawer({
                             <Info size={11} className="text-blue-500 font-bold" />
                             Lọc biểu đồ: Ngày {chartData[brushRange.startIndex]?.day} - {chartData[brushRange.endIndex]?.day}
                         </span>
-                        <button 
+                        <button
                             onClick={() => setBrushRange(null)}
                             className="text-blue-600 hover:text-blue-800 underline font-bold cursor-pointer"
                         >
@@ -162,13 +149,12 @@ export default function LogsDrawer({
                         </div>
                     ) : (
                         filteredSortedLogs.map((log, i) => (
-                            <div 
-                                key={i} 
-                                className={`p-3 rounded-lg border text-[11px] leading-relaxed flex flex-col gap-1.5 ${
-                                    log.type === 'critical' 
-                                        ? 'bg-red-50/70 border-red-100 text-red-800 shadow-sm shadow-red-50/50' 
+                            <div
+                                key={i}
+                                className={`p-3 rounded-lg border text-[11px] leading-relaxed flex flex-col gap-1.5 ${log.type === 'critical'
+                                        ? 'bg-red-50/70 border-red-100 text-red-800 shadow-sm shadow-red-50/50'
                                         : 'bg-amber-50/70 border-amber-100 text-amber-800 shadow-sm shadow-amber-50/50'
-                                }`}
+                                    }`}
                             >
                                 <div className="flex items-center justify-between font-bold">
                                     <span className="flex items-center gap-1">
@@ -177,11 +163,10 @@ export default function LogsDrawer({
                                         ) : (
                                             <AlertCircle size={12} className="text-amber-500" />
                                         )}
-                                        Ngày {formatDayToDate(log.day)} (Ngày thứ {log.day})
+                                        Ngày thứ {log.day}
                                     </span>
-                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold tracking-wide uppercase ${
-                                        log.type === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                                    }`}>
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold tracking-wide uppercase ${log.type === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                                        }`}>
                                         {log.type === 'critical' ? 'Nguy cấp' : 'Cảnh báo'}
                                     </span>
                                 </div>

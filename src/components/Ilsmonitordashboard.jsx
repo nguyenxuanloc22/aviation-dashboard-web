@@ -69,7 +69,7 @@ export default function ILSMonitorDashboard() {
     // Run simulation with active params
     const result = useMemo(() => runSimulation(activeParams), [activeParams]);
     const { chartData, metrics } = result;
-    const { lastHI, lastRT, lastRF, warnDay90, dangerDay75, estopDay, rmse, splitIdx } = metrics;
+    const { lastHI, lastRT, lastRF, warnDay90, dangerDay75, estopDay, rmse, splitIdx, firstVswrWarningDay, firstVswrCriticalDay } = metrics;
 
     // Reset brush range when simulation data changes
     React.useEffect(() => {
@@ -224,13 +224,17 @@ export default function ILSMonitorDashboard() {
     React.useEffect(() => {
         setToasts([]); // Clear old alerts
         
-        const { firstCriticalDay } = metrics;
-        if (firstCriticalDay) {
-            const dateStr = formatDayToDate(firstCriticalDay);
+        const { firstCriticalDay, firstVswrCriticalDay } = metrics;
+        const criticalDay = (firstCriticalDay && firstVswrCriticalDay)
+            ? Math.min(firstCriticalDay, firstVswrCriticalDay)
+            : (firstCriticalDay || firstVswrCriticalDay);
+
+        if (criticalDay) {
+            const dateStr = formatDayToDate(criticalDay);
             addToast(
                 'critical', 
                 'Cần bảo trì và bảo dưỡng', 
-                `⚠️ THÔNG TIN: Thiết bị cần bảo trì bảo dưỡng trước ngày ${dateStr} (Ngày thứ ${firstCriticalDay}) để đảm bảo hoạt động an toàn và tránh chạm ngưỡng nguy hiểm.`
+                `⚠️ THÔNG TIN: Thiết bị cần bảo trì bảo dưỡng trước ngày ${dateStr} (Ngày thứ ${criticalDay}) để đảm bảo hoạt động an toàn và tránh chạm ngưỡng nguy hiểm.`
             );
         } else {
             addToast(
@@ -288,6 +292,8 @@ export default function ILSMonitorDashboard() {
                 warnDay90={warnDay90}
                 dangerDay75={dangerDay75}
                 estopDay={estopDay}
+                firstVswrWarningDay={firstVswrWarningDay}
+                firstVswrCriticalDay={firstVswrCriticalDay}
                 splitIdx={splitIdx}
                 activeParams={activeParams}
                 criticalCount={criticalCount}

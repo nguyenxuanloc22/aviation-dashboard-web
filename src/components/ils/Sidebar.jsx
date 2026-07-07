@@ -86,8 +86,10 @@ export default function Sidebar({
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
                                 <InputRow label="Số ngày mô phỏng" name="days" value={formParams.days} onChange={handleChange} step={1} min={60} max={365} unit="ngày" />
                                 <InputRow label="RF Power định mức" name="baselineRF" value={formParams.baselineRF} onChange={handleChange} unit="%" hint="100% = công suất phát chuẩn" />
-                                <InputRow label="Ngưỡng cảnh báo" name="warningThreshold" value={formParams.warningThreshold} onChange={handleChange} unit="%" />
-                                <InputRow label="Ngưỡng dừng đài" name="alarmThreshold" value={formParams.alarmThreshold} onChange={handleChange} unit="%" />
+                                <InputRow label="Ngưỡng cảnh báo RF" name="warningThreshold" value={formParams.warningThreshold} onChange={handleChange} unit="%" />
+                                <InputRow label="Ngưỡng dừng đài RF" name="alarmThreshold" value={formParams.alarmThreshold} onChange={handleChange} unit="%" />
+                                <InputRow label="Cảnh báo VSWR" name="vswrWarningThreshold" value={formParams.vswrWarningThreshold} onChange={handleChange} step={0.05} min={1.1} max={2.0} hint="Ngưỡng cảnh báo phản xạ anten (mặc định 1.5)" />
+                                <InputRow label="Dừng đài VSWR" name="vswrAlarmThreshold" value={formParams.vswrAlarmThreshold} onChange={handleChange} step={0.05} min={1.5} max={3.0} hint="Ngưỡng dừng đài do phản xạ anten (mặc định 2.0)" />
                             </div>
                         )}
                     </div>
@@ -97,9 +99,9 @@ export default function Sidebar({
                         {renderAccordionHeader('degradation', <TrendingDown size={14} className="text-blue-600" />, 'Độ suy hao (Degradation)')}
                         {expandedSections.degradation && (
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
-                                <InputRow label="Hao mòn pha 1" name="degradP1" value={formParams.degradP1} onChange={handleChange} step={0.001} unit="/ngày" hint="Ngày 1 - 180 (Mùa khô & chạy roda)" />
-                                <InputRow label="Hao mòn pha 2" name="degradP2" value={formParams.degradP2} onChange={handleChange} step={0.001} unit="/ngày" hint="Ngày 181 - 300 (Thời tiết đỉnh điểm)" />
-                                <InputRow label="Hao mòn pha 3" name="degradP3" value={formParams.degradP3} onChange={handleChange} step={0.001} unit="/ngày" hint="Ngày 301 - 365 (Cuối chu kỳ)" />
+                                <InputRow label="RF Power mục tiêu" name="scenarioEndRF" value={formParams.scenarioEndRF} onChange={handleChange} step={0.5} min={85.0} max={98.0} unit="%" hint="Mức RF Power mô phỏng ở ngày thứ 365" />
+                                <InputRow label="Năng lượng Ea" name="Ea" value={formParams.Ea} onChange={handleChange} step={0.05} min={0.1} max={2.0} unit="eV" hint="Hệ số nhiệt Arrhenius (mặc định 0.70)" />
+                                <InputRow label="Mũ độ ẩm Peck" name="humidityExponent" value={formParams.humidityExponent} onChange={handleChange} step={0.1} min={1.0} max={5.0} hint="Hệ số Peck cho ẩm nhà trạm (mặc định 2.66)" />
                             </div>
                         )}
                     </div>

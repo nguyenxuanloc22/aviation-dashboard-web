@@ -246,6 +246,45 @@ export default function ChartsArea({
                 </div>
             )}
 
+            {/* SECTION 2.5: VSWR CHART */}
+            {(chartView === 'all' || chartView === 'vswr') && (
+                <div className="space-y-6">
+                    <div className="border-b border-sky-100 pb-2 pt-2">
+                        <h3 className="text-xs font-extrabold text-slate-700 flex items-center gap-2 tracking-wider">
+                            <TrendingDown size={16} className="text-emerald-600" />
+                            HỆ SỐ SÓNG ĐỨNG VSWR
+                        </h3>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mt-0.5">
+                            Chỉ số phối hợp trở kháng đường truyền Anten của đài dẫn đường ILS
+                        </p>
+                    </div>
+
+                    <div className="bg-white border border-sky-100 rounded-xl p-5 shadow-sm shadow-blue-50/50 hover:shadow-md hover:shadow-blue-100/40 transition-all duration-200">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+                                Hệ số sóng đứng VSWR theo thời gian (365 ngày)
+                            </h2>
+                            <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-100 rounded px-2 py-0.5 self-start">
+                                Ngưỡng lý tưởng ≈ 1.0 | Cảnh báo: {activeParams.vswrWarningThreshold} | Nguy hiểm: {activeParams.vswrAlarmThreshold}
+                            </span>
+                        </div>
+                        <ResponsiveContainer width="100%" height={260}>
+                            <LineChart syncId="ils-charts" data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#E2EEF8" vertical={false} />
+                                <XAxis dataKey="day" tick={{ fill: '#64748B', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                                <YAxis domain={[1.0, 2.5]} tick={{ fill: '#64748B', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                                <Tooltip content={<ChartTooltip />} />
+                                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 5 }} />
+                                <ReferenceLine y={activeParams.vswrWarningThreshold} stroke="#F59E0B" strokeDasharray="4 4" label={{ value: `Cảnh báo: ${activeParams.vswrWarningThreshold}`, fill: '#F59E0B', fontSize: 9, position: 'right' }} />
+                                <ReferenceLine y={activeParams.vswrAlarmThreshold} stroke="#EF4444" strokeDasharray="4 4" label={{ value: `Dừng đài: ${activeParams.vswrAlarmThreshold}`, fill: '#EF4444', fontSize: 9, position: 'right' }} />
+                                <Line type="monotone" dataKey="vswr" name="Hệ số sóng đứng VSWR" stroke="#10B981" strokeWidth={2.2} dot={false} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            )}
+
             {/* SECTION 3: CLIMATE & SENSORS (Only under 'env') */}
             {(chartView === 'env') && (
                 <div className="bg-white border border-sky-100 rounded-xl p-5 shadow-sm shadow-blue-50/50 hover:shadow-md hover:shadow-blue-100/40 transition-all duration-200">

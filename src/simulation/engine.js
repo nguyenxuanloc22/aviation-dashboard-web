@@ -120,9 +120,11 @@ export function runSimulation(params) {
         baselineRF = 100.0,
         warningThreshold = 92.0,
         alarmThreshold = 88.0,
-        degradP1 = 0.018,
-        degradP2 = 0.034,
-        degradP3 = 0.026,
+        scenarioEndRF = 90.0,
+        Ea = 0.70,
+        humidityExponent = 2.66,
+        vswrWarningThreshold = 1.5,
+        vswrAlarmThreshold = 2.0,
         beta = 1.5,
         eta = 730,
         lookBack = 30,
@@ -139,6 +141,7 @@ export function runSimulation(params) {
     const normSDM = makeNormalRNG(seed + 5000);
     const normLstm = makeNormalRNG(seed + 6000);
     const stormRNG = mulberry32(seed + 7000);
+    const normVSWR = makeNormalRNG(seed + 8000);
 
     // ── 2. CLIMATE CONSTANTS (Vinh Airport) ─────────────────
     const monthly_temp_mean = {
@@ -184,29 +187,9 @@ export function runSimulation(params) {
     }
 
     // ── 4. DEGRADATION SIMULATION ─────────────────────────────
-    const daily_degradation = new Float64Array(days);
-    const environment_degradation = new Float64Array(days);
     const storm_event = new Float64Array(days);
 
-    // 4.1. Base daily degradation
-    for (let t = 0; t < days; t++) {
-        if (t <= 180) {
-            daily_degradation[t] = degradP1;
-        } else if (t <= 300) {
-            daily_degradation[t] = degradP2;
-        } else {
-            daily_degradation[t] = degradP3;
-        }
-    }
-
-    // 4.2. Environmental stress
-    for (let t = 0; t < days; t++) {
-        const humidity_stress = Math.max(0, Math.min(1, (shelter_humidity[t] - 55) / 20));
-        const rain_stress = rain_index[t];
-        environment_degradation[t] = 0.006 * rain_stress + 0.004 * humidity_stress;
-    }
-
-    // 4.3. Storm events (July - November)
+    // 4.1. Storm events (July - November)
     const storm_candidate = [];
     const storm_candidate_rain = [];
     for (let t = 0; t < days; t++) {
@@ -224,49 +207,65 @@ export function runSimulation(params) {
         storm_event[d] = 1;
     });
 
-    const event_degradation = storm_event.map(v => v * 0.018);
+    // 4.2. Raw daily damage using physical model (Weibull age, Arrhenius temp, Peck humidity)
+    const raw_daily_damage = new Float64Array(days);
+    let sumRawDamage = 0;
+    const kB = 8.617333262145e-5;
+    const T_ref_K = 25.0 + 273.15; // 298.15
+    const RH_ref = 55.0;
 
-    // 4.4. Total daily degradation
-    const total_daily_degradation = new Float64Array(days);
     for (let t = 0; t < days; t++) {
-        total_daily_degradation[t] = Math.max(0.004, daily_degradation[t] + environment_degradation[t] + event_degradation[t]);
+        // 4.2.1. Age degradation Weibull factor
+        const age_degradation_factor = (beta / eta) * Math.pow((t + 1) / eta, beta - 1);
+
+        // 4.2.2. Arrhenius temperature acceleration
+        const T_use_K = ambient_temperature[t] + 273.15;
+        const temp_acc = Math.exp((Ea / kB) * (1.0 / T_ref_K - 1.0 / T_use_K));
+
+        // 4.2.3. Peck humidity acceleration
+        const hum_acc = Math.pow(Math.max(shelter_humidity[t], 1.0) / RH_ref, humidityExponent);
+
+        // 4.2.4. Adverse weather factor
+        const weather_factor = (1.0 + 0.35 * rain_index[t]) * (1.0 + 0.25 * storm_event[t]);
+
+        raw_daily_damage[t] = age_degradation_factor * temp_acc * hum_acc * weather_factor;
+        sumRawDamage += raw_daily_damage[t];
     }
 
-    // 4.5. Cumulative degradation
+    // 4.3. Calibrate degradation to scenarioEndRF target
+    const scenario_total_degradation = baselineRF - scenarioEndRF;
+    const scale_factor = sumRawDamage > 0 ? (scenario_total_degradation / sumRawDamage) : 0;
+
+    const total_daily_degradation = new Float64Array(days);
     const cumulative_degradation = new Float64Array(days);
     let accum = 0;
     for (let t = 0; t < days; t++) {
+        total_daily_degradation[t] = scale_factor * raw_daily_damage[t];
         accum += total_daily_degradation[t];
         cumulative_degradation[t] = accum;
     }
 
-    // 4.6. RF Power
-    const rf_power_raw = new Float64Array(days);
-    for (let t = 0; t < days; t++) {
-        const noise = normNoise(0, 0.025);
-        rf_power_raw[t] = baselineRF - cumulative_degradation[t] + noise;
-    }
-
-    // Smooth (rolling window 5)
-    const rf_power_smooth = new Float64Array(days);
-    for (let t = 0; t < days; t++) {
-        let sum = 0;
-        let count = 0;
-        for (let w = Math.max(0, t - 4); w <= t; w++) {
-            sum += rf_power_raw[w];
-            count++;
-        }
-        rf_power_smooth[t] = sum / count;
-    }
-
-    // Cumulative minimum (non-increasing constraint)
+    // 4.4. RF Power (no noise, clipped to [85.0, 102.0] like Python)
     const rf_power = new Float64Array(days);
-    let minVal = Infinity;
+    const health_floor_rf = 85.0;
     for (let t = 0; t < days; t++) {
-        if (rf_power_smooth[t] < minVal) {
-            minVal = rf_power_smooth[t];
-        }
-        rf_power[t] = Math.max(86.5, Math.min(102, minVal));
+        const rfVal = baselineRF - cumulative_degradation[t];
+        rf_power[t] = Math.max(health_floor_rf, Math.min(102.0, rfVal));
+    }
+
+    // 4.5. VSWR Simulation (Voltage Standing Wave Ratio)
+    const vswr = new Float64Array(days);
+    const reflection_coefficient = new Float64Array(days);
+    const max_cum_degrad = cumulative_degradation[days - 1] || 1;
+    for (let t = 0; t < days; t++) {
+        const damage_ratio = cumulative_degradation[t] / max_cum_degrad;
+        const humidity_stress_vswr = Math.max(0, Math.min(1, (shelter_humidity[t] - RH_ref) / 25.0));
+        const vswr_noise = normVSWR(0, 0.005);
+        let coeff = 0.04 + 0.08 * damage_ratio + 0.03 * humidity_stress_vswr + 0.02 * rain_index[t] + 0.04 * storm_event[t] + vswr_noise;
+        coeff = Math.max(0.01, Math.min(0.45, coeff));
+        reflection_coefficient[t] = coeff;
+        const vswrVal = (1 + coeff) / (1 - coeff);
+        vswr[t] = Math.max(1.0, Math.min(2.5, vswrVal));
     }
 
     // ── 5. DDM AND SDM SIMULATION ─────────────────────────────
@@ -451,6 +450,18 @@ export function runSimulation(params) {
         }
     }
 
+    // Scan for VSWR warning and alarm days
+    let firstVswrWarningDay = null;
+    let firstVswrCriticalDay = null;
+    for (let t = 0; t < days; t++) {
+        if (firstVswrWarningDay === null && vswr[t] >= vswrWarningThreshold) {
+            firstVswrWarningDay = t + 1;
+        }
+        if (firstVswrCriticalDay === null && vswr[t] >= vswrAlarmThreshold) {
+            firstVswrCriticalDay = t + 1;
+        }
+    }
+
     // ── 10. PREPARE CHART DATA ────────────────────────────────
     const chartData = [];
     const startYearDate = new Date(2026, 0, 1);
@@ -479,6 +490,8 @@ export function runSimulation(params) {
             sdm: parseFloat(sdm_loc[t].toFixed(4)),
             rainIndex: parseFloat(rain_index[t].toFixed(3)),
             stormEvent: storm_event[t],
+            vswr: parseFloat(vswr[t].toFixed(3)),
+            reflectionCoefficient: parseFloat(reflection_coefficient[t].toFixed(4)),
         });
     }
 
@@ -519,8 +532,11 @@ export function runSimulation(params) {
             lastRF: rfFinal[days - 1],
             lastHI: hiSeries[days - 1],
             lastRT: rT[days - 1],
+            lastVSWR: vswr[days - 1],
             firstWarningDay,
             firstCriticalDay,
+            firstVswrWarningDay,
+            firstVswrCriticalDay,
             warnDay90,
             dangerDay75,
             estopDay,
@@ -568,6 +584,8 @@ export function generateSimulationLogs(chartData, params) {
     let rtDangerLogged = false;
     let rfWarnLogged = false;
     let rfAlarmLogged = false;
+    let vswrWarnLogged = false;
+    let vswrAlarmLogged = false;
 
     chartData.forEach(d => {
         // Storm events
@@ -636,6 +654,25 @@ export function generateSimulationLogs(chartData, params) {
             });
             rtWarnLogged = true;
         }
+
+        // VSWR checks
+        if (d.vswr >= params.vswrAlarmThreshold && !vswrAlarmLogged) {
+            logs.push({
+                day: d.day,
+                date: d.date,
+                type: 'critical',
+                message: `VSWR mức nguy hiểm: Hệ số sóng đứng VSWR = ${d.vswr.toFixed(2)} vượt ngưỡng nguy cấp (${params.vswrAlarmThreshold}). Nguy cơ hỏng hóc hoặc phản xạ ngược làm hỏng máy phát.`
+            });
+            vswrAlarmLogged = true;
+        } else if (d.vswr >= params.vswrWarningThreshold && !vswrWarnLogged) {
+            logs.push({
+                day: d.day,
+                date: d.date,
+                type: 'warning',
+                message: `Cảnh báo sóng đứng: Hệ số sóng đứng VSWR = ${d.vswr.toFixed(2)} vượt ngưỡng cảnh báo (${params.vswrWarningThreshold}). Phối hợp trở kháng đường truyền anten suy giảm.`
+            });
+            vswrWarnLogged = true;
+        }
     });
 
     return logs.sort((a, b) => a.day - b.day);
@@ -649,9 +686,11 @@ export const DEFAULT_PARAMS = {
     baselineRF: 100.0,
     warningThreshold: 92.0,
     alarmThreshold: 88.0,
-    degradP1: 0.018,
-    degradP2: 0.034,
-    degradP3: 0.026,
+    scenarioEndRF: 90.0,
+    Ea: 0.70,
+    humidityExponent: 2.66,
+    vswrWarningThreshold: 1.5,
+    vswrAlarmThreshold: 2.0,
     beta: 1.5,
     eta: 730,
     lookBack: 30,

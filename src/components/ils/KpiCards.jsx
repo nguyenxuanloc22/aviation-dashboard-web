@@ -17,7 +17,7 @@ const formatDayToDate = (day) => {
 //    metrics (firstWarningDay, firstCriticalDay)
 // ============================================================
 export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics }) {
-    const { firstWarningDay, firstCriticalDay } = metrics || {};
+    const { firstWarningDay, firstCriticalDay, lastVSWR, firstVswrWarningDay } = metrics || {};
     
     // Status classification:
     // NGUY HIỂM (RF < 88), CẢNH BÁO (88 <= RF < 92), BÌNH THƯỜNG (RF >= 92)
@@ -25,16 +25,16 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
     let statusColor = "emerald";
     let statusText = "Hệ thống vận hành an toàn";
     
-    if (lastRF < activeParams.alarmThreshold) {
+    if (lastRF < activeParams.alarmThreshold || lastVSWR >= activeParams.vswrAlarmThreshold) {
         status = "NGUY HIỂM";
         statusColor = "red";
         statusText = "Yêu cầu bảo dưỡng khẩn cấp!";
-    } else if (lastRF < activeParams.warningThreshold) {
+    } else if (lastRF < activeParams.warningThreshold || lastVSWR >= activeParams.vswrWarningThreshold) {
         status = "CẢNH BÁO";
         statusColor = "amber";
         statusText = "Cần tăng tần suất theo dõi";
     }
-
+ 
     const colorClasses = {
         emerald: {
             border: "border-emerald-500",
@@ -55,11 +55,11 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
             dot: "bg-red-500"
         }
     };
-
+ 
     const currentClasses = colorClasses[statusColor];
-
+ 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
             
             {/* KPI 1: System Status */}
             <div className={`bg-white border-t-4 ${currentClasses.border} border-x border-b border-sky-100 rounded-xl p-5 shadow-sm shadow-blue-50/50 hover:shadow-md transition-all flex flex-col justify-between`}>
@@ -82,7 +82,7 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                     </div>
                 </div>
             </div>
-
+ 
             {/* KPI 2: RF Power */}
             <div className={`bg-white border-t-4 ${
                 lastRF < activeParams.alarmThreshold ? 'border-red-500' :
@@ -107,7 +107,7 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                     )}
                 </div>
             </div>
-
+ 
             {/* KPI 3: Health Index */}
             <div className={`bg-white border-t-4 ${
                 lastHI < 0.3 ? 'border-red-500' :
@@ -129,7 +129,7 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                     </div>
                 </div>
             </div>
-
+ 
             {/* KPI 4: Reliability R(t) */}
             <div className={`bg-white border-t-4 ${
                 lastRT < 0.75 ? 'border-red-500' :
@@ -152,6 +152,34 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                     ) : (
                         <span className="text-emerald-600 font-semibold">Vận hành cực kỳ tin cậy.</span>
                     )}
+                </div>
+            </div>
+
+            {/* KPI 5: VSWR System */}
+            <div className={`bg-white border-t-4 ${
+                lastVSWR >= activeParams.vswrAlarmThreshold ? 'border-red-500' :
+                lastVSWR >= activeParams.vswrWarningThreshold ? 'border-amber-500' : 'border-emerald-500'
+            } border-x border-b border-sky-100 rounded-xl p-5 shadow-sm shadow-blue-50/50 hover:shadow-md transition-all flex flex-col justify-between`}>
+                <div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hệ số sóng đứng (VSWR)</div>
+                    <div className={`text-2xl font-extrabold ${
+                        lastVSWR >= activeParams.vswrAlarmThreshold ? 'text-red-600' :
+                        lastVSWR >= activeParams.vswrWarningThreshold ? 'text-amber-600' : 'text-emerald-600'
+                    }`}>
+                        {(lastVSWR ?? 1.00).toFixed(2)}
+                    </div>
+                </div>
+                <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-50 leading-normal">
+                    {lastVSWR >= activeParams.vswrAlarmThreshold ? (
+                        <span className="text-red-600 font-semibold">VSWR vượt ngưỡng nguy cấp.</span>
+                    ) : lastVSWR >= activeParams.vswrWarningThreshold ? (
+                        <span className="text-amber-600 font-semibold">Vượt ngưỡng cảnh báo VSWR.</span>
+                    ) : (
+                        <span className="text-emerald-600 font-semibold">Phối hợp trở kháng anten tốt.</span>
+                    )}
+                    <div className="mt-1 text-[10px] text-slate-400">
+                        Vượt cảnh báo: {firstVswrWarningDay ? <span className="text-amber-600 font-semibold">{formatDayToDate(firstVswrWarningDay)} (Ngày {firstVswrWarningDay})</span> : "Không"}
+                    </div>
                 </div>
             </div>
             
