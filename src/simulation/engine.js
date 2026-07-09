@@ -1,4 +1,4 @@
-import airportInfo from './ils_info.json';
+import airportInfo from './ils_info.json' with { type: 'json' };
 
 // ============================================================
 //  SEEDED PSEUDO-RANDOM NUMBER GENERATOR (Mulberry32)
@@ -116,7 +116,6 @@ function chooseStormDays(candidates, weights, count, seedRNG) {
 // ============================================================
 export function runSimulation(params) {
     const {
-        days = 365,
         baselineRF = 100.0,
         warningThreshold = 92.0,
         alarmThreshold = 88.0,
@@ -131,6 +130,7 @@ export function runSimulation(params) {
         trainRatio = 0.748,
         seed = 42,
     } = params;
+    const days = 365;
 
     // ── 1. RANDOM STATE (seeded generators) ──────────────────
     const normTemp = makeNormalRNG(seed + 1000);
@@ -316,11 +316,11 @@ export function runSimulation(params) {
         if (t < lookBack) {
             rf_lstm_raw[t] = NaN;
         } else {
-            const actualRF = rf_power[t];
             const prevRF = rf_power[t - 1];
             const prevRF2 = rf_power[t - 2];
-            // Smooth + lag + noise with std=0.18 for MAE ~0.15%
-            rf_lstm_raw[t] = 0.65 * actualRF + 0.25 * prevRF + 0.10 * prevRF2 + normLstm(0, 0.18);
+            const prevRF3 = rf_power[t - 3];
+            // Fix data leakage: predict day t using only past values (t-1, t-2, t-3)
+            rf_lstm_raw[t] = 0.65 * prevRF + 0.25 * prevRF2 + 0.10 * prevRF3 + normLstm(0, 0.18);
         }
     }
 
@@ -432,25 +432,29 @@ export function runSimulation(params) {
         rT[t] = Math.exp(-lambdaCumulative);
     }
 
-    // Scan for first warning day (RF < warningThreshold)
+    const healthFloor = 85.0;
+    const hiWarningThreshold = (warningThreshold - healthFloor) / (baselineRF - healthFloor);
+    const hiAlarmThreshold = (alarmThreshold - healthFloor) / (baselineRF - healthFloor);
+
+    // Scan for Situation 2 (firstWarningDay): RF < warningThreshold hoặc HI < hiWarningThreshold hoặc R(t) < 0.75
     let firstWarningDay = null;
     for (let t = 0; t < days; t++) {
-        if (rf_power[t] < warningThreshold) {
+        if (rf_power[t] < warningThreshold || hiSeries[t] < hiWarningThreshold || rT[t] < 0.75) {
             firstWarningDay = t + 1;
             break;
         }
     }
 
-    // Scan for first critical day (HI < 0.3 or R(t) < 0.75)
+    // Scan for Situation 3 (firstCriticalDay): RF < alarmThreshold hoặc HI < hiAlarmThreshold
     let firstCriticalDay = null;
     for (let t = 0; t < days; t++) {
-        if (hiSeries[t] < 0.3 || rT[t] < 0.75) {
+        if (rf_power[t] < alarmThreshold || hiSeries[t] < hiAlarmThreshold) {
             firstCriticalDay = t + 1;
             break;
         }
     }
 
-    // Scan for VSWR warning and alarm days
+    // Scan for VSWR warning and alarm days (Situation 4 & 5)
     let firstVswrWarningDay = null;
     let firstVswrCriticalDay = null;
     for (let t = 0; t < days; t++) {
@@ -512,49 +516,180 @@ export function runSimulation(params) {
     const lstmCorrectedMetrics = getMetrics(testActual, testCorrected);
     const baselineMetrics = getMetrics(testActual, testBaseline);
 
-    const rf_actual_start = testActual[0];
-    const rf_actual_end = testActual[testActual.length - 1];
-    const rf_lstm_end = testCorrected[testCorrected.length - 1];
-
-    const rf_drop_actual = rf_actual_start - rf_actual_end;
-    const rf_final_error = Math.abs(rf_actual_end - rf_lstm_end);
-
-    let warnDay90 = null, dangerDay75 = null, estopDay = null;
-    for (let t = 0; t < days; t++) {
-        if (warnDay90 === null && rT[t] < 0.90) warnDay90 = t + 1;
-        if (dangerDay75 === null && rT[t] < 0.75) dangerDay75 = t + 1;
-        if (estopDay === null && rfFinal[t] < alarmThreshold) estopDay = t + 1;
-    }
-
     return {
         chartData,
-        metrics: {
-            lastRF: rfFinal[days - 1],
-            lastHI: hiSeries[days - 1],
-            lastRT: rT[days - 1],
-            lastVSWR: vswr[days - 1],
-            firstWarningDay,
-            firstCriticalDay,
-            firstVswrWarningDay,
-            firstVswrCriticalDay,
-            warnDay90,
-            dangerDay75,
-            estopDay,
-            rmse: lstmCorrectedMetrics.rmse,
-            lstm_raw_mae: lstmRawMetrics.mae,
-            lstm_raw_rmse: lstmRawMetrics.rmse,
-            lstm_mae: lstmCorrectedMetrics.mae,
-            lstm_rmse: lstmCorrectedMetrics.rmse,
-            base_mae: baselineMetrics.mae,
-            base_rmse: baselineMetrics.rmse,
-            rf_drop_actual,
-            rf_final_error,
-            rf_actual_start,
-            rf_actual_end,
-            rf_lstm_end,
-            splitIdx: testIndexStart
-        },
+        metrics: computeMetrics(chartData, params, days),
         params
+    };
+}
+
+export function computeMetrics(chartData, params, N) {
+    const days = N;
+    const baselineRF = params.baselineRF || 100.0;
+    const warningThreshold = params.warningThreshold || 92.0;
+    const alarmThreshold = params.alarmThreshold || 88.0;
+    const vswrWarningThreshold = params.vswrWarningThreshold || 1.5;
+    const vswrAlarmThreshold = params.vswrAlarmThreshold || 2.0;
+
+    const healthFloor = 85.0;
+    const hiWarningThreshold = (warningThreshold - healthFloor) / (baselineRF - healthFloor);
+    const hiAlarmThreshold = (alarmThreshold - healthFloor) / (baselineRF - healthFloor);
+
+    // 1. Scan for firstWarningDay
+    let firstWarningDay = null;
+    for (let t = 0; t < days; t++) {
+        const d = chartData[t];
+        if (!d) break;
+        const R_t = d.rt * 100;
+        if ((R_t < 90) || (d.rfActual < warningThreshold) || (d.hi < hiWarningThreshold) || (d.vswr >= vswrWarningThreshold)) {
+            firstWarningDay = t + 1;
+            break;
+        }
+    }
+
+    // 2. Scan for firstCriticalDay
+    let firstCriticalDay = null;
+    for (let t = 0; t < days; t++) {
+        const d = chartData[t];
+        if (!d) break;
+        if ((d.rfActual < alarmThreshold) || (d.hi < hiAlarmThreshold) || (d.vswr >= vswrAlarmThreshold)) {
+            firstCriticalDay = t + 1;
+            break;
+        }
+    }
+
+    // 3. Scan for VSWR warning and alarm days
+    let firstVswrWarningDay = null;
+    let firstVswrCriticalDay = null;
+    for (let t = 0; t < days; t++) {
+        const d = chartData[t];
+        if (!d) break;
+        if (firstVswrWarningDay === null && d.vswr >= vswrWarningThreshold) {
+            firstVswrWarningDay = t + 1;
+        }
+        if (firstVswrCriticalDay === null && d.vswr >= vswrAlarmThreshold) {
+            firstVswrCriticalDay = t + 1;
+        }
+    }
+
+    // Scan for RF warning and alarm days specifically
+    let rfWarningDay = null;
+    let rfAlarmDay = null;
+    for (let t = 0; t < days; t++) {
+        const d = chartData[t];
+        if (!d) break;
+        if (rfWarningDay === null && d.rfActual < warningThreshold) {
+            rfWarningDay = t + 1;
+        }
+        if (rfAlarmDay === null && d.rfActual < alarmThreshold) {
+            rfAlarmDay = t + 1;
+        }
+    }
+
+    // 4. Milestones scanning
+    let warnDay90 = null, dangerDay75 = null, estopDay = null;
+    for (let t = 0; t < days; t++) {
+        const d = chartData[t];
+        if (!d) break;
+        const R_t = d.rt * 100;
+        if (warnDay90 === null && R_t < 90 && d.rfActual >= warningThreshold) warnDay90 = t + 1;
+        if (dangerDay75 === null && (d.rfActual < warningThreshold || d.hi < hiWarningThreshold || d.rt < 0.75)) dangerDay75 = t + 1;
+        if (estopDay === null && (d.rfActual < alarmThreshold || d.hi < hiAlarmThreshold)) estopDay = t + 1;
+    }
+
+    // 5. Stat metrics on the test set
+    const testIndexStart = 273;
+    const testActual = [];
+    const testRawLstm = [];
+    const testCorrected = [];
+    const testBaseline = [];
+
+    for (let t = testIndexStart; t < days; t++) {
+        const d = chartData[t];
+        if (!d) break;
+        testActual.push(d.rfActual);
+        testRawLstm.push(d.rfRawLSTM);
+        testCorrected.push(d.rfAI);
+        testBaseline.push(d.rfBaseline);
+    }
+
+    let rmse = 0;
+    let lstm_raw_mae = 0;
+    let lstm_raw_rmse = 0;
+    let lstm_mae = 0;
+    let lstm_rmse = 0;
+    let base_mae = 0;
+    let base_rmse = 0;
+    let rf_drop_actual = 0;
+    let rf_final_error = 0;
+    let rf_actual_start = 100;
+    let rf_actual_end = 100;
+    let rf_lstm_end = 100;
+
+    if (testActual.length > 0) {
+        const getMetrics = (act, pred) => {
+            let sumAbsErr = 0;
+            let sumSqErr = 0;
+            const size = act.length;
+            for (let i = 0; i < size; i++) {
+                const diff = pred[i] - act[i];
+                sumAbsErr += Math.abs(diff);
+                sumSqErr += diff * diff;
+            }
+            return {
+                mae: sumAbsErr / size,
+                rmse: Math.sqrt(sumSqErr / size)
+            };
+        };
+
+        const lstmRawMetrics = getMetrics(testActual, testRawLstm);
+        const lstmCorrectedMetrics = getMetrics(testActual, testCorrected);
+        const baselineMetrics = getMetrics(testActual, testBaseline);
+
+        rmse = lstmCorrectedMetrics.rmse;
+        lstm_raw_mae = lstmRawMetrics.mae;
+        lstm_raw_rmse = lstmRawMetrics.rmse;
+        lstm_mae = lstmCorrectedMetrics.mae;
+        lstm_rmse = lstmCorrectedMetrics.rmse;
+        base_mae = baselineMetrics.mae;
+        base_rmse = baselineMetrics.rmse;
+
+        rf_actual_start = testActual[0];
+        rf_actual_end = testActual[testActual.length - 1];
+        rf_lstm_end = testCorrected[testCorrected.length - 1];
+        rf_drop_actual = rf_actual_start - rf_actual_end;
+        rf_final_error = Math.abs(rf_actual_end - rf_lstm_end);
+    }
+
+    const currentStatus = chartData[Math.min(days - 1, chartData.length - 1)];
+
+    return {
+        lastRF: currentStatus ? currentStatus.rfActual : 100,
+        lastHI: currentStatus ? currentStatus.hi : 1.0,
+        lastRT: currentStatus ? currentStatus.rt : 1.0,
+        lastVSWR: currentStatus ? currentStatus.vswr : 1.0,
+        firstWarningDay,
+        firstCriticalDay,
+        firstVswrWarningDay,
+        firstVswrCriticalDay,
+        rfWarningDay,
+        rfAlarmDay,
+        warnDay90,
+        dangerDay75,
+        estopDay,
+        rmse,
+        lstm_raw_mae,
+        lstm_raw_rmse,
+        lstm_mae,
+        lstm_rmse,
+        base_mae,
+        base_rmse,
+        rf_drop_actual,
+        rf_final_error,
+        rf_actual_start,
+        rf_actual_end,
+        rf_lstm_end,
+        splitIdx: testIndexStart
     };
 }
 
@@ -578,100 +713,136 @@ function getMetrics(actual, pred) {
 // ============================================================
 export function generateSimulationLogs(chartData, params) {
     const logs = [];
-    let hiLv2Logged = false;
-    let hiLv3Logged = false;
-    let rtWarnLogged = false;
+    const baseRF = params.baselineRF || 100.0;
+    const warnRF = params.warningThreshold || 92.0;
+    const alarmRF = params.alarmThreshold || 88.0;
+    const healthFloor = 85.0;
+
+    const hiWarningThreshold = (warnRF - healthFloor) / (baseRF - healthFloor);
+    const hiAlarmThreshold = (alarmRF - healthFloor) / (baseRF - healthFloor);
+
     let rtDangerLogged = false;
+    let rtWarnLogged = false;
+    let rfDangerLogged = false;
     let rfWarnLogged = false;
-    let rfAlarmLogged = false;
+    let hiDangerLogged = false;
+    let hiWarnLogged = false;
+    let vswrDangerLogged = false;
     let vswrWarnLogged = false;
-    let vswrAlarmLogged = false;
 
     chartData.forEach(d => {
-        // Storm events
-        if (d.stormEvent === 1) {
-            logs.push({
-                day: d.day,
-                date: d.date,
-                type: 'warning',
-                message: `Dị thường thời tiết: Có mưa giông sét lớn tại sân bay ${airportInfo.AIRPORT_ICAO || 'Vinh'}. Độ ẩm trạm đạt ${d.shelterHum}%, thúc đẩy suy giảm công suất.`
-            });
+        const day = d.day;
+        const R_t = d.rt * 100;
+        const RF = d.rfActual;
+        const HI = d.hi;
+        const VSWR = d.vswr;
+
+        // 1. Nhóm Cảnh báo R(t)
+        if (R_t < 75) {
+            if (!rtDangerLogged) {
+                logs.push({
+                    day,
+                    date: d.date,
+                    severity: 'CANH_BAO',
+                    title: 'Cảnh báo độ tin cậy hệ thống',
+                    message: `Ngày thứ ${day}: Hàm tin cậy R(t) rơi xuống mức thấp: R(t) = ${R_t.toFixed(2)}%.`,
+                    action: 'Lập kế hoạch bảo trì hệ thống tổng thể, rà soát lại cấu hình vận hành để tìm nguyên nhân suy hao.'
+                });
+                rtDangerLogged = true;
+            }
+        } else if (R_t < 90 && RF >= warnRF) {
+            if (!rtWarnLogged) {
+                logs.push({
+                    day,
+                    date: d.date,
+                    severity: 'THEO_DOI',
+                    title: 'Theo dõi hệ thống (R(t) suy giảm nhẹ)',
+                    message: `Ngày thứ ${day}: Thực tế R(t) = ${R_t.toFixed(2)}%, RF = ${RF.toFixed(2)}%.`,
+                    action: 'Chưa sửa ngay; tăng tần suất theo dõi từ xa, đẩy sớm lịch kiểm tra định kỳ lần tới.'
+                });
+                rtWarnLogged = true;
+            }
         }
 
-        // RF Power checks
-        if (d.rfActual < params.alarmThreshold && !rfAlarmLogged) {
-            logs.push({
-                day: d.day,
-                date: d.date,
-                type: 'critical',
-                message: `Dừng đài khẩn cấp: Công suất phát RF (${d.rfActual}%) suy giảm dưới ngưỡng cho phép (${params.alarmThreshold}%).`
-            });
-            rfAlarmLogged = true;
-        } else if (d.rfActual < params.warningThreshold && !rfWarnLogged) {
-            logs.push({
-                day: d.day,
-                date: d.date,
-                type: 'warning',
-                message: `Cảnh báo công suất: Công suất phát RF (${d.rfActual}%) giảm dưới ngưỡng an toàn (${params.warningThreshold}%).`
-            });
-            rfWarnLogged = true;
+        // 2. Nhóm Cảnh báo RF
+        if (RF < alarmRF) {
+            if (!rfDangerLogged) {
+                logs.push({
+                    day,
+                    date: d.date,
+                    severity: 'NGUY_CAP',
+                    title: 'Công suất phát RF ở mức nguy cấp',
+                    message: `Ngày thứ ${day}: Công suất tụt sâu đe dọa gián đoạn truyền sóng: RF = ${RF.toFixed(2)}%.`,
+                    action: 'Yêu cầu kỹ thuật viên ứng trực khẩn cấp, kiểm tra xử lý khối khuếch đại công suất (PA) ngay lập tức.'
+                });
+                rfDangerLogged = true;
+            }
+        } else if (RF < warnRF) {
+            if (!rfWarnLogged) {
+                logs.push({
+                    day,
+                    date: d.date,
+                    severity: 'CANH_BAO',
+                    title: 'Cảnh báo công suất phát RF',
+                    message: `Ngày thứ ${day}: Công suất phát thực tế giảm còn: RF = ${RF.toFixed(2)}%.`,
+                    action: 'Kiểm tra tầng tiền khuếch đại, kiểm tra nguồn cấp của bộ phát công suất RF.'
+                });
+                rfWarnLogged = true;
+            }
         }
 
-        // Health Index checks
-        if (d.hi < 0.3 && !hiLv3Logged) {
-            logs.push({
-                day: d.day,
-                date: d.date,
-                type: 'critical',
-                message: `Sức khỏe hệ thống nguy cấp: HI = ${d.hi.toFixed(4)} (Dưới ngưỡng an toàn mức nguy cấp).`
-            });
-            hiLv3Logged = true;
-        } else if (d.hi < 0.7 && !hiLv2Logged) {
-            logs.push({
-                day: d.day,
-                date: d.date,
-                type: 'warning',
-                message: `Sức khỏe hệ thống suy giảm: HI = ${d.hi.toFixed(4)} (Dưới ngưỡng cảnh báo).`
-            });
-            hiLv2Logged = true;
+        // 3. Nhóm Cảnh báo HI
+        if (HI < hiAlarmThreshold) {
+            if (!hiDangerLogged) {
+                logs.push({
+                    day,
+                    date: d.date,
+                    severity: 'NGUY_CAP',
+                    title: 'Chỉ số sức khỏe HI mức nguy cấp',
+                    message: `Ngày thứ ${day}: Thiết bị có nguy cơ hỏng hóc vật lý cao: HI = ${HI.toFixed(3)}.`,
+                    action: 'Kích hoạt hệ thống dự phòng (nếu có), thực hiện dừng máy để kiểm tra kỹ thuật khẩn cấp toàn diện.'
+                });
+                hiDangerLogged = true;
+            }
+        } else if (HI < hiWarningThreshold) {
+            if (!hiWarnLogged) {
+                logs.push({
+                    day,
+                    date: d.date,
+                    severity: 'CANH_BAO',
+                    title: 'Cảnh báo chỉ số sức khỏe phần cứng',
+                    message: `Ngày thứ ${day}: Chỉ số sức khỏe hệ thống giảm: HI = ${HI.toFixed(3)}.`,
+                    action: 'Trích xuất log lỗi phần cứng, kiểm tra nhiệt độ môi trường và trạng thái các module vi mạch.'
+                });
+                hiWarnLogged = true;
+            }
         }
 
-        // Reliability checks
-        if (d.rt < 0.75 && !rtDangerLogged) {
-            logs.push({
-                day: d.day,
-                date: d.date,
-                type: 'critical',
-                message: `Hàm tin cậy R(t) rơi vào mức nguy hiểm: R(t) = ${(d.rt * 100).toFixed(2)}% (Yêu cầu kiểm tra & bảo dưỡng gấp).`
-            });
-            rtDangerLogged = true;
-        } else if (d.rt < 0.90 && !rtWarnLogged) {
-            logs.push({
-                day: d.day,
-                date: d.date,
-                type: 'warning',
-                message: `Độ tin cậy R(t) giảm dưới 90%: R(t) = ${(d.rt * 100).toFixed(2)}% (Cần lên kế hoạch bảo trì).`
-            });
-            rtWarnLogged = true;
-        }
-
-        // VSWR checks
-        if (d.vswr >= params.vswrAlarmThreshold && !vswrAlarmLogged) {
-            logs.push({
-                day: d.day,
-                date: d.date,
-                type: 'critical',
-                message: `VSWR mức nguy hiểm: Hệ số sóng đứng VSWR = ${d.vswr.toFixed(2)} vượt ngưỡng nguy cấp (${params.vswrAlarmThreshold}). Nguy cơ hỏng hóc hoặc phản xạ ngược làm hỏng máy phát.`
-            });
-            vswrAlarmLogged = true;
-        } else if (d.vswr >= params.vswrWarningThreshold && !vswrWarnLogged) {
-            logs.push({
-                day: d.day,
-                date: d.date,
-                type: 'warning',
-                message: `Cảnh báo sóng đứng: Hệ số sóng đứng VSWR = ${d.vswr.toFixed(2)} vượt ngưỡng cảnh báo (${params.vswrWarningThreshold}). Phối hợp trở kháng đường truyền anten suy giảm.`
-            });
-            vswrWarnLogged = true;
+        // 4. Nhóm Cảnh báo VSWR
+        if (VSWR >= params.vswrAlarmThreshold) {
+            if (!vswrDangerLogged) {
+                logs.push({
+                    day,
+                    date: d.date,
+                    severity: 'NGUY_CAP',
+                    title: 'Nguy cơ mismatch nghiêm trọng',
+                    message: `Ngày thứ ${day}: Cảnh báo đường truyền: VSWR = ${VSWR.toFixed(2)}.`,
+                    action: 'Ưu tiên xử lý đường truyền RF ngay lập tức để tránh cháy hỏng bộ phối hợp trở kháng.'
+                });
+                vswrDangerLogged = true;
+            }
+        } else if (VSWR >= params.vswrWarningThreshold) {
+            if (!vswrWarnLogged) {
+                logs.push({
+                    day,
+                    date: d.date,
+                    severity: 'CANH_BAO',
+                    title: 'Cảnh báo đường truyền',
+                    message: `Ngày thứ ${day}: Cảnh báo đường truyền: VSWR = ${VSWR.toFixed(2)}.`,
+                    action: 'Kiểm tra và vệ sinh hệ thống cáp dẫn, anten và các đầu nối connector.'
+                });
+                vswrWarnLogged = true;
+            }
         }
     });
 

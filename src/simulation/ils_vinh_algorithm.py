@@ -724,10 +724,131 @@ df.to_csv("ils_vinh_rf_no_maintenance_dataset.csv", index=False, encoding="utf-8
 result_df.to_csv("ils_vinh_rf_no_maintenance_forecast_results.csv", index=False, encoding="utf-8-sig")
 metrics_df.to_csv("ils_vinh_rf_no_maintenance_metrics.csv", index=False, encoding="utf-8-sig")
 
+# Kết xuất ra simulation_results.json để đồng bộ với React Web App
+import json
+import os
+
+# Đường dẫn đích đến thư mục simulation của React App
+json_output_path = os.path.join(os.path.dirname(__file__), "simulation_results.json")
+
+# Chuẩn bị metrics
+warning_days = np.where((r_t < 0.90) | (df["RF_Power"] < warning_threshold_rf) | (hi_series < hi_warning_threshold) | (df["VSWR"] >= vswr_warning_threshold))[0]
+firstWarningDay = int(warning_days[0] + 1) if len(warning_days) > 0 else None
+
+crit_days = np.where((df["RF_Power"] < alarm_threshold_rf) | (hi_series < hi_alarm_threshold) | (df["VSWR"] >= vswr_alarm_threshold))[0]
+firstCriticalDay = int(crit_days[0] + 1) if len(crit_days) > 0 else None
+
+vswr_warn_days = np.where(df["VSWR"] >= vswr_warning_threshold)[0]
+firstVswrWarningDay = int(vswr_warn_days[0] + 1) if len(vswr_warn_days) > 0 else None
+
+vswr_crit_days = np.where(df["VSWR"] >= vswr_alarm_threshold)[0]
+firstVswrCriticalDay = int(vswr_crit_days[0] + 1) if len(vswr_crit_days) > 0 else None
+
+warn_rt_days = np.where((r_t < 0.90) & (df["RF_Power"] >= warning_threshold_rf))[0]
+warnDay90 = int(warn_rt_days[0] + 1) if len(warn_rt_days) > 0 else None
+
+danger_rt_days = np.where((df["RF_Power"] < warning_threshold_rf) | (hi_series < hi_warning_threshold) | (r_t < 0.75))[0]
+dangerDay75 = int(danger_rt_days[0] + 1) if len(danger_rt_days) > 0 else None
+
+estop_days = np.where((df["RF_Power"] < alarm_threshold_rf) | (hi_series < hi_alarm_threshold))[0]
+estopDay = int(estop_days[0] + 1) if len(estop_days) > 0 else None
+
+
+export_metrics = {
+    "lastRF": float(rf_final_series[-1]),
+    "lastHI": float(hi_series[-1]),
+    "lastRT": float(r_t[-1]),
+    "lastVSWR": float(df["VSWR"].iloc[-1]),
+    "firstWarningDay": firstWarningDay,
+    "firstCriticalDay": firstCriticalDay,
+    "firstVswrWarningDay": firstVswrWarningDay,
+    "firstVswrCriticalDay": firstVswrCriticalDay,
+    "warnDay90": warnDay90,
+    "dangerDay75": dangerDay75,
+    "estopDay": estopDay,
+    "rmse": float(lstm_rmse),
+    "lstm_raw_mae": float(lstm_raw_mae),
+    "lstm_raw_rmse": float(lstm_raw_rmse),
+    "lstm_mae": float(lstm_mae),
+    "lstm_rmse": float(lstm_rmse),
+    "base_mae": float(base_mae),
+    "base_rmse": float(base_rmse),
+    "rf_drop_actual": float(rf_drop_actual),
+    "rf_final_error": float(rf_final_error),
+    "rf_actual_start": float(y_actual[0, 0]),
+    "rf_actual_end": float(y_actual[-1, 0]),
+    "rf_lstm_end": float(pred_actual[-1, 0]),
+    "splitIdx": int(train_cutoff)
+}
+
+export_params = {
+    "days": int(days),
+    "baselineRF": float(baseline_rf),
+    "warningThreshold": float(warning_threshold_rf),
+    "alarmThreshold": float(alarm_threshold_rf),
+    "scenarioEndRF": float(scenario_end_rf),
+    "Ea": float(Ea),
+    "humidityExponent": float(humidity_exponent),
+    "vswrWarningThreshold": float(vswr_warning_threshold),
+    "vswrAlarmThreshold": float(vswr_alarm_threshold),
+    "beta": float(beta),
+    "eta": float(eta),
+    "lookBack": int(look_back),
+    "trainRatio": float(train_cutoff / days),
+    "seed": 42
+}
+
+chart_data = []
+for i in range(len(df)):
+    row = df.iloc[i]
+    date_str = row["Date"].strftime("%Y-%m-%d")
+    
+    rf_ai_val = row["RF_LSTM_Full"]
+    rf_ai_val = float(rf_ai_val) if not pd.isna(rf_ai_val) else None
+    
+    rf_raw_lstm_val = None
+    rf_baseline_val = None
+    if i >= test_index_start:
+        test_k = i - test_index_start
+        if test_k < len(pred_actual_raw):
+            rf_raw_lstm_val = float(pred_actual_raw[test_k, 0])
+        if test_k < len(baseline_pred_actual):
+            rf_baseline_val = float(baseline_pred_actual[test_k, 0])
+            
+    chart_data.append({
+        "day": int(i + 1),
+        "date": date_str,
+        "rfActual": round(float(row["RF_Power"]), 3),
+        "rfAI": round(rf_ai_val, 3) if rf_ai_val is not None else None,
+        "rfRawLSTM": round(rf_raw_lstm_val, 3) if rf_raw_lstm_val is not None else None,
+        "rfBaseline": round(rf_baseline_val, 3) if rf_baseline_val is not None else None,
+        "hi": round(float(hi_series[i]), 4),
+        "rt": round(float(r_t[i]), 4),
+        "temp": round(float(row["Ambient_Temperature"]), 2),
+        "humidity": round(float(row["Ambient_Humidity"]), 2),
+        "shelterHum": round(float(row["Shelter_Humidity"]), 2),
+        "ddm": round(float(row["DDM_LOC"]), 4),
+        "sdm": round(float(row["SDM_LOC"]), 4),
+        "rainIndex": round(float(row["Rain_Index"]), 3),
+        "stormEvent": int(row["Storm_Event"]),
+        "vswr": round(float(row["VSWR"]), 3),
+        "reflectionCoefficient": round(float(row["Reflection_Coefficient"]), 4)
+    })
+
+json_output = {
+    "chartData": chart_data,
+    "metrics": export_metrics,
+    "params": export_params
+}
+
+with open(json_output_path, "w", encoding="utf-8") as f:
+    json.dump(json_output, f, indent=2, ensure_ascii=False)
+
 print("\nĐã lưu:")
 print("- ils_vinh_rf_no_maintenance_dataset.csv")
 print("- ils_vinh_rf_no_maintenance_forecast_results.csv")
 print("- ils_vinh_rf_no_maintenance_metrics.csv")
+print(f"- simulation_results.json (Đồng bộ React App: {json_output_path})")
 
 # ============================================================
 # 17. TRỰC QUAN HÓA

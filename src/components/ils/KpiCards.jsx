@@ -17,7 +17,7 @@ const formatDayToDate = (day) => {
 //    metrics (firstWarningDay, firstCriticalDay)
 // ============================================================
 export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics }) {
-    const { firstWarningDay, firstCriticalDay, lastVSWR, firstVswrWarningDay } = metrics || {};
+    const { firstWarningDay, firstCriticalDay, lastVSWR, firstVswrWarningDay, rfWarningDay, rfAlarmDay } = metrics || {};
     
     // Status classification:
     // NGUY HIỂM (RF < 88), CẢNH BÁO (88 <= RF < 92), BÌNH THƯỜNG (RF >= 92)
@@ -78,7 +78,7 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                 <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-50">
                     <div className="font-semibold text-slate-700">{statusText}</div>
                     <div className="mt-1 text-[10px] text-slate-400">
-                        Chạm cảnh báo (92%): {firstWarningDay ? <span className="text-amber-600 font-bold">{formatDayToDate(firstWarningDay)} (Ngày {firstWarningDay})</span> : "Không"}
+                        Cảnh báo đầu tiên: {firstWarningDay ? <span className="text-amber-600 font-bold">{formatDayToDate(firstWarningDay)} (Ngày {firstWarningDay})</span> : "Không"}
                     </div>
                 </div>
             </div>
@@ -98,13 +98,21 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                     </div>
                 </div>
                 <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-50 leading-normal">
-                    {lastRF < activeParams.alarmThreshold ? (
-                        <span className="text-red-600 font-semibold">Dưới ngưỡng an toàn dừng đài ({activeParams.alarmThreshold}%).</span>
-                    ) : lastRF < activeParams.warningThreshold ? (
-                        <span className="text-amber-600 font-semibold">Dưới ngưỡng cảnh báo ({activeParams.warningThreshold}%).</span>
-                    ) : (
-                        <span className="text-emerald-600 font-semibold">Đạt chuẩn công suất thiết kế.</span>
-                    )}
+                    <div className="mb-2">
+                        {lastRF < activeParams.alarmThreshold ? (
+                            <span className="text-red-600 font-semibold">Dưới ngưỡng dừng đài ({activeParams.alarmThreshold}%).</span>
+                        ) : lastRF < activeParams.warningThreshold ? (
+                            <span className="text-amber-600 font-semibold">Dưới ngưỡng cảnh báo ({activeParams.warningThreshold}%).</span>
+                        ) : (
+                            <span className="text-emerald-600 font-semibold">Đạt chuẩn công suất thiết kế.</span>
+                        )}
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-snug">
+                        Chạm cảnh báo ({activeParams.warningThreshold}%): {rfWarningDay ? <span className="text-amber-600 font-bold">{formatDayToDate(rfWarningDay)} (Ngày {rfWarningDay})</span> : "Không"}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-slate-400 leading-snug">
+                        Chạm dừng đài ({activeParams.alarmThreshold}%): {rfAlarmDay ? <span className="text-red-600 font-bold">{formatDayToDate(rfAlarmDay)} (Ngày {rfAlarmDay})</span> : "Không"}
+                    </div>
                 </div>
             </div>
  

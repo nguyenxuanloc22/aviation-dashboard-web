@@ -148,37 +148,56 @@ export default function LogsDrawer({
                             Không tìm thấy cảnh báo phù hợp với bộ lọc.
                         </div>
                     ) : (
-                        filteredSortedLogs.map((log, i) => (
-                            <div
-                                key={i}
-                                className={`p-3 rounded-lg border text-[11px] leading-relaxed flex flex-col gap-1.5 ${log.type === 'critical'
-                                        ? 'bg-red-50/70 border-red-100 text-red-800 shadow-sm shadow-red-50/50'
-                                        : 'bg-amber-50/70 border-amber-100 text-amber-800 shadow-sm shadow-amber-50/50'
-                                    }`}
-                            >
-                                <div className="flex items-center justify-between font-bold">
-                                    <span className="flex items-center gap-1">
-                                        {log.type === 'critical' ? (
-                                            <AlertTriangle size={12} className="text-red-500" />
-                                        ) : (
-                                            <AlertCircle size={12} className="text-amber-500" />
-                                        )}
-                                        Ngày thứ {log.day}
-                                    </span>
-                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold tracking-wide uppercase ${log.type === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                                        }`}>
-                                        {log.type === 'critical' ? 'Nguy cấp' : 'Cảnh báo'}
-                                    </span>
+                        filteredSortedLogs.map((log, i) => {
+                            const isNguyCap = log.severity === 'NGUY_CAP';
+                            const isCanhBao = log.severity === 'CANH_BAO';
+                            
+                            const bgBorderColor = isNguyCap
+                                ? 'bg-red-50/75 border-red-100 text-red-950 shadow-xs'
+                                : isCanhBao
+                                    ? 'bg-amber-50/75 border-amber-100 text-amber-950 shadow-xs'
+                                    : 'bg-sky-50/75 border-sky-100 text-sky-950 shadow-xs';
+                                    
+                            const labelBgColor = isNguyCap
+                                ? 'bg-red-100 text-red-700 border border-red-200'
+                                : isCanhBao
+                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                    : 'bg-sky-100 text-sky-700 border border-sky-200';
+                                    
+                            const labelText = isNguyCap ? 'Nguy cấp' : (isCanhBao ? 'Cảnh báo' : 'Theo dõi');
+                            
+                            return (
+                                <div key={i} className={`p-3 rounded-xl border text-[11px] leading-relaxed flex flex-col gap-2 ${bgBorderColor}`}>
+                                    <div className="flex items-center justify-between font-bold">
+                                        <span className="flex items-center gap-1.5">
+                                            {isNguyCap ? (
+                                                <AlertTriangle size={13} className="text-red-600 animate-pulse" />
+                                            ) : (
+                                                <AlertCircle size={13} className={isCanhBao ? "text-amber-600" : "text-sky-600"} />
+                                            )}
+                                            {log.title}
+                                        </span>
+                                        <span className={`text-[8px] px-1.5 py-0.5 rounded font-black tracking-wider uppercase ${labelBgColor}`}>
+                                            {labelText}
+                                        </span>
+                                    </div>
+                                    <div className="font-semibold text-slate-700">{log.message}</div>
+                                    
+                                    <div className={`mt-1.5 pt-2 border-t border-dashed ${isNguyCap ? 'border-red-200' : (isCanhBao ? 'border-amber-200' : 'border-sky-200')} text-[10px] leading-normal font-medium`}>
+                                        <strong className={`block mb-1 text-[9px] uppercase tracking-wider ${isNguyCap ? 'text-red-800' : (isCanhBao ? 'text-amber-800' : 'text-sky-800')}`}>
+                                            ⚙️ Biện pháp xử lý kỹ thuật:
+                                        </strong>
+                                        <p className="text-slate-600 font-bold">{log.action}</p>
+                                    </div>
                                 </div>
-                                <div className="font-medium">{log.message}</div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
 
                 {/* Drawer Footer */}
                 <div className="p-4 border-t border-slate-100 bg-slate-50 text-[10px] text-slate-400 leading-normal flex-shrink-0">
-                    Mức độ: <span className="text-amber-600 font-bold">Vàng</span> cho Cảnh báo thông số suy giảm, <span className="text-red-600 font-bold">Đỏ</span> cho Nguy cấp hoặc chạm ngưỡng dừng đài.
+                    Mức độ: <span className="text-sky-600 font-bold">Xanh dương</span> cho Theo dõi, <span className="text-amber-600 font-bold">Vàng</span> cho Cảnh báo thông số suy giảm, và <span className="text-red-600 font-bold">Đỏ</span> cho Nguy cấp đe dọa dừng đài.
                 </div>
             </div>
         </>

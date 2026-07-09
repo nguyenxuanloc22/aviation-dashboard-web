@@ -29,6 +29,15 @@ export default function ChartsArea({
     // Filter test data (from index splitIdx, which represents Oct 1st onwards)
     const testChartData = chartData.filter(d => d.day >= (splitIdx + 1));
 
+    // Calculate HI thresholds dynamically to match the Python model exactly
+    const baseRF = activeParams.baselineRF || 100.0;
+    const warnRF = activeParams.warningThreshold || 92.0;
+    const alarmRF = activeParams.alarmThreshold || 88.0;
+    const healthFloor = 85.0;
+
+    const hiWarningThreshold = (warnRF - healthFloor) / (baseRF - healthFloor);
+    const hiAlarmThreshold = (alarmRF - healthFloor) / (baseRF - healthFloor);
+
     return (
         <div className="space-y-6">
 
@@ -215,8 +224,8 @@ export default function ChartsArea({
                                     <XAxis dataKey="day" tick={{ fill: '#64748B', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
                                     <YAxis domain={[0, 1.05]} tick={{ fill: '#64748B', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
                                     <Tooltip content={<ChartTooltip />} />
-                                    <ReferenceLine y={0.70} stroke="#F59E0B" strokeDasharray="5 5" label={{ value: 'Cảnh báo: 0.7', fill: '#F59E0B', fontSize: 9, position: 'right' }} />
-                                    <ReferenceLine y={0.30} stroke="#EF4444" strokeDasharray="5 5" label={{ value: 'Nguy cấp: 0.3', fill: '#EF4444', fontSize: 9, position: 'right' }} />
+                                    <ReferenceLine y={hiWarningThreshold} stroke="#D97706" strokeDasharray="4 4" label={{ value: `Ngưỡng cảnh báo HI < ${hiWarningThreshold.toFixed(3)}`, fill: '#B45309', fontSize: 9, position: 'insideTopLeft' }} />
+                                    <ReferenceLine y={hiAlarmThreshold} stroke="#EF4444" strokeDasharray="4 4" label={{ value: `Ngưỡng nguy hiểm HI < ${hiAlarmThreshold.toFixed(3)}`, fill: '#B91C1C', fontSize: 9, position: 'insideTopLeft' }} />
                                     <Line type="monotone" dataKey="hi" name="Health Index HI" stroke="#7C3AED" strokeWidth={3.5} dot={false} />
                                 </LineChart>
                             </ResponsiveContainer>

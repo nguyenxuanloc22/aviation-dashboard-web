@@ -1,4 +1,4 @@
-import { Activity, RefreshCw, Calendar, Info, TrendingDown, ChevronDown, Sliders } from 'lucide-react';
+import { Activity, RefreshCw, Calendar, Info, TrendingDown, ChevronDown, Sliders, Database, Zap } from 'lucide-react';
 
 // Helper to convert day index (1-365) to solar calendar date DD/MM/YYYY in 2026
 const formatDayToDate = (day) => {
@@ -47,7 +47,17 @@ export default function Topbar({
     hasUnsavedChanges,
     isSidebarCollapsed,
     setIsSidebarCollapsed,
+    dataSourceMode,
+    setDataSourceMode,
 }) {
+    const baseRF = activeParams.baselineRF || 100.0;
+    const warnRF = activeParams.warningThreshold || 92.0;
+    const alarmRF = activeParams.alarmThreshold || 88.0;
+    const healthFloor = 85.0;
+
+    const hiWarningThreshold = (warnRF - healthFloor) / (baseRF - healthFloor);
+    const hiAlarmThreshold = (alarmRF - healthFloor) / (baseRF - healthFloor);
+
     return (
         <header className="bg-white border-b border-sky-100 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm z-30 relative">
             <div className="flex items-center gap-3">
@@ -75,6 +85,34 @@ export default function Topbar({
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+
+                {/* Data Source Mode Toggle Switch */}
+                <div className="flex bg-[#F1F5F9] p-0.5 rounded-lg border border-sky-100 shadow-xs">
+                    <button
+                        onClick={() => setDataSourceMode('python')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all cursor-pointer ${
+                            dataSourceMode === 'python'
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                        }`}
+                        title="Hiển thị dữ liệu kiểm định chính xác tuyệt đối được kết xuất trực tiếp từ thuật toán Python"
+                    >
+                        <Database size={12} />
+                        <span>Dữ liệu Python (Chuẩn)</span>
+                    </button>
+                    <button
+                        onClick={() => setDataSourceMode('interactive')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all cursor-pointer ${
+                            dataSourceMode === 'interactive'
+                                ? 'bg-amber-600 text-white shadow-xs'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                        }`}
+                        title="Chạy mô phỏng tương tác thời gian thực và cho phép thay đổi tham số đầu vào"
+                    >
+                        <Zap size={12} />
+                        <span>Mô phỏng cát (Sandbox)</span>
+                    </button>
+                </div>
 
                 {/* Forecast Milestones Dropdown */}
                 <div className="relative">
@@ -123,39 +161,39 @@ export default function Topbar({
                                 <div className="p-3 space-y-2">
                                     {[
                                         {
-                                            label: 'R(t) < 90% lần đầu',
+                                            label: `R(t) < 0.90 nhưng RF >= ${activeParams.warningThreshold || 92}%`,
                                             val: warnDay90 ? `${formatDayToDate(warnDay90)} (Ngày thứ ${warnDay90})` : 'Không chạm',
                                             hit: !!warnDay90,
                                             color: 'amber',
-                                            desc: 'Độ tin cậy bắt đầu suy giảm — cần lên kế hoạch bảo trì phòng ngừa.',
+                                            desc: 'Chưa sửa ngay; tăng theo dõi, kiểm tra định kỳ sớm hơn.',
                                         },
                                         {
-                                            label: 'R(t) < 75% (nguy hiểm)',
+                                            label: `RF < ${activeParams.warningThreshold || 92}% hoặc HI < ${hiWarningThreshold.toFixed(3)} hoặc R(t) < 0.75`,
                                             val: dangerDay75 ? `${formatDayToDate(dangerDay75)} (Ngày thứ ${dangerDay75})` : 'Không chạm',
                                             hit: !!dangerDay75,
                                             color: 'red',
-                                            desc: 'Hệ thống tiếp cận ngưỡng nguy hiểm — nguy cơ hỏng hóc cao.',
+                                            desc: 'Vào vùng cảnh báo; kiểm tra hệ thống, lập kế hoạch bảo trì.',
                                         },
                                         {
-                                            label: 'RF dưới ngưỡng dừng đài',
+                                            label: `RF < ${activeParams.alarmThreshold || 88}% hoặc HI < ${hiAlarmThreshold.toFixed(3)}`,
                                             val: estopDay ? `${formatDayToDate(estopDay)} (Ngày thứ ${estopDay})` : 'Không chạm',
                                             hit: !!estopDay,
                                             color: 'red',
-                                            desc: `Công suất phát RF sẽ rơi xuống dưới ${activeParams.alarmThreshold}% — cần dừng đài khẩn cấp.`,
+                                            desc: 'Vùng nguy hiểm; cần kiểm tra kỹ thuật khẩn cấp.',
                                         },
                                         {
-                                            label: 'VSWR vượt cảnh báo lần đầu',
+                                            label: `VSWR >= ${activeParams.vswrWarningThreshold || 1.5}`,
                                             val: firstVswrWarningDay ? `${formatDayToDate(firstVswrWarningDay)} (Ngày thứ ${firstVswrWarningDay})` : 'Không chạm',
                                             hit: !!firstVswrWarningDay,
                                             color: 'amber',
-                                            desc: `Hệ số sóng đứng VSWR chạm hoặc vượt ngưỡng cảnh báo ${activeParams.vswrWarningThreshold}.`,
+                                            desc: 'Kiểm tra đường truyền RF: cáp, anten, connector.',
                                         },
                                         {
-                                            label: 'VSWR vượt ngưỡng dừng đài',
+                                            label: `VSWR >= ${activeParams.vswrAlarmThreshold || 2.0}`,
                                             val: firstVswrCriticalDay ? `${formatDayToDate(firstVswrCriticalDay)} (Ngày thứ ${firstVswrCriticalDay})` : 'Không chạm',
                                             hit: !!firstVswrCriticalDay,
                                             color: 'red',
-                                            desc: `Hệ số sóng đứng VSWR chạm hoặc vượt ngưỡng nguy hiểm ${activeParams.vswrAlarmThreshold} — dừng đài khẩn cấp.`,
+                                            desc: 'Nguy cơ mismatch nghiêm trọng; cần ưu tiên xử lý đường truyền RF.',
                                         },
                                         {
                                             label: 'Bắt đầu dự báo AI (LSTM)',
@@ -217,27 +255,29 @@ export default function Topbar({
                 </button>
 
                 {/* Update Simulation Button */}
-                <button 
-                    onClick={handleUpdate} 
-                    disabled={isRunning}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
-                        hasUnsavedChanges 
-                            ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-200 animate-pulse ring-2 ring-amber-300 ring-offset-1' 
-                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200'
-                    }`}
-                >
-                    {isRunning ? (
-                        <>
-                            <RefreshCw size={12} className="animate-spin" />
-                            <span>Đang chạy...</span>
-                        </>
-                    ) : (
-                        <>
-                            <RefreshCw size={12} />
-                            <span>Cập nhật mô phỏng</span>
-                        </>
-                    )}
-                </button>
+                {dataSourceMode === 'interactive' && (
+                    <button 
+                        onClick={handleUpdate} 
+                        disabled={isRunning}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
+                            hasUnsavedChanges 
+                                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-200 animate-pulse ring-2 ring-amber-300 ring-offset-1' 
+                                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200'
+                        }`}
+                    >
+                        {isRunning ? (
+                            <>
+                                <RefreshCw size={12} className="animate-spin" />
+                                <span>Đang chạy...</span>
+                            </>
+                        ) : (
+                            <>
+                                <RefreshCw size={12} />
+                                <span>Cập nhật mô phỏng</span>
+                            </>
+                        )}
+                    </button>
+                )}
             </div>
         </header>
     );

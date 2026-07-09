@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo } from 'react';
 
 // Simulation engine (pure logic, no UI)
-import { runSimulation, generateSimulationLogs, DEFAULT_PARAMS, removeVietnameseTones } from '../simulation/engine';
+import { runSimulation, generateSimulationLogs, computeMetrics, DEFAULT_PARAMS, removeVietnameseTones } from '../simulation/engine';
+import pythonData from '../simulation/simulation_results.json';
 
 // Modular UI components
 // Modular UI components
@@ -29,6 +30,7 @@ const formatDayToDate = (day) => {
 //  MAIN DASHBOARD
 // ============================================================
 export default function ILSMonitorDashboard() {
+    const [dataSourceMode, setDataSourceMode] = useState('python'); // 'python' | 'interactive'
     const [formParams, setFormParams] = useState({ ...DEFAULT_PARAMS });
     const [activeParams, setActiveParams] = useState({ ...DEFAULT_PARAMS });
     const [toasts, setToasts] = useState([]);
@@ -66,15 +68,61 @@ export default function ILSMonitorDashboard() {
         }));
     };
 
-    // Run simulation with active params
-    const result = useMemo(() => runSimulation(activeParams), [activeParams]);
-    const { chartData, metrics } = result;
+    // Current parameters based on data mode
+    const currentParams = useMemo(() => {
+        return dataSourceMode === 'python' ? (pythonData?.params || activeParams) : activeParams;
+    }, [dataSourceMode, activeParams]);
+
+    // Run simulation with active params or use Python data
+    const result = useMemo(() => {
+        if (dataSourceMode === 'python' && pythonData) {
+            return pythonData;
+        }
+        // Force 365 days internally
+        const simParams = { ...activeParams, days: 365 };
+        return runSimulation(simParams);
+    }, [dataSourceMode, activeParams]);
+
+    // Clamp days (N) between 1 and 365
+    const N = useMemo(() => {
+        return Math.min(365, Math.max(1, parseFloat(currentParams.days) || 365));
+    }, [currentParams.days]);
+
+    // Step 2: Progressive dynamic clipping filter
+    const activeData = useMemo(() => {
+        return result.chartData.filter(d => d.day <= N);
+    }, [result.chartData, N]);
+
+    // Step 3: Run the Rules Engine on activeData and compute metrics up to day N
+    const currentMetrics = useMemo(() => {
+        return computeMetrics(result.chartData, currentParams, N);
+    }, [result.chartData, currentParams, N]);
+
+    // Step 4: Fixed X-Axis plotting array (subsequent days set to null)
+    const chartDataForPlotting = useMemo(() => {
+        return result.chartData.map(item => {
+            if (item.day <= N) return item;
+            return {
+                ...item,
+                rfActual: null,
+                rfAI: null,
+                rfRawLSTM: null,
+                rfBaseline: null,
+                hi: null,
+                rt: null,
+                vswr: null
+            };
+        });
+    }, [result.chartData, N]);
+
+    const chartData = chartDataForPlotting;
+    const metrics = currentMetrics;
     const { lastHI, lastRT, lastRF, warnDay90, dangerDay75, estopDay, rmse, splitIdx, firstVswrWarningDay, firstVswrCriticalDay } = metrics;
 
     // Reset brush range when simulation data changes
     React.useEffect(() => {
         setBrushRange(null);
-    }, [chartData]);
+    }, [result.chartData]);
 
     // Collapse sidebar by default on small screens
     React.useEffect(() => {
@@ -93,7 +141,19 @@ export default function ILSMonitorDashboard() {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        // Keep the raw string value to support decimal points and minus signs during typing
+        if (name === 'days') {
+            const num = parseFloat(value);
+            if (!isNaN(num)) {
+                if (num > 365) {
+                    setFormParams(p => ({ ...p, days: '365' }));
+                    return;
+                }
+                if (num < 1) {
+                    setFormParams(p => ({ ...p, days: '1' }));
+                    return;
+                }
+            }
+        }
         setFormParams(p => ({ ...p, [name]: value }));
     };
 
@@ -103,8 +163,15 @@ export default function ILSMonitorDashboard() {
             // Parse all parameter values to numeric floats before running simulation
             const parsed = {};
             Object.keys(formParams).forEach(k => {
-                parsed[k] = parseFloat(formParams[k]);
+                let val = parseFloat(formParams[k]);
+                if (k === 'days') {
+                    if (isNaN(val)) val = 365;
+                    val = Math.min(365, Math.max(1, val));
+                }
+                parsed[k] = val;
             });
+            // Synchronize clamped value back to form UI
+            setFormParams(p => ({ ...p, days: parsed.days.toString() }));
             setActiveParams(parsed);
             setIsRunning(false);
             // Pulse the milestones button to hint user to check updated values
@@ -132,19 +199,19 @@ export default function ILSMonitorDashboard() {
 
     // Calculate logs based on simulation results
     const rawSimulationLogs = useMemo(() => {
-        return generateSimulationLogs(chartData, activeParams);
-    }, [chartData, activeParams]);
+        return generateSimulationLogs(activeData, currentParams);
+    }, [activeData, currentParams]);
 
     // Filter raw simulation logs by brush zoom range
     const activeRangeLogs = useMemo(() => {
         if (!brushRange) return rawSimulationLogs;
         const startDay = chartData[brushRange.startIndex]?.day ?? 1;
-        const endDay = chartData[brushRange.endIndex]?.day ?? activeParams.days;
+        const endDay = chartData[brushRange.endIndex]?.day ?? currentParams.days;
         return rawSimulationLogs.filter(log => log.day >= startDay && log.day <= endDay);
-    }, [rawSimulationLogs, brushRange, chartData, activeParams.days]);
+    }, [rawSimulationLogs, brushRange, chartData, currentParams.days]);
 
-    const criticalCount = useMemo(() => activeRangeLogs.filter(l => l.type === 'critical').length, [activeRangeLogs]);
-    const warningCount = useMemo(() => activeRangeLogs.filter(l => l.type === 'warning').length, [activeRangeLogs]);
+    const criticalCount = useMemo(() => activeRangeLogs.filter(l => l.severity === 'NGUY_CAP').length, [activeRangeLogs]);
+    const warningCount = useMemo(() => activeRangeLogs.filter(l => l.severity === 'CANH_BAO' || l.severity === 'THEO_DOI').length, [activeRangeLogs]);
 
     // Processed Warning Logs (Search + Filter + Sort + Brush)
     const filteredSortedLogs = useMemo(() => {
@@ -155,14 +222,17 @@ export default function ILSMonitorDashboard() {
             const queryNormalized = removeVietnameseTones(logSearchQuery.toLowerCase().trim());
             result = result.filter(log => {
                 const messageNormalized = removeVietnameseTones(log.message.toLowerCase());
+                const titleNormalized = removeVietnameseTones(log.title.toLowerCase());
                 const dayTextNormalized = removeVietnameseTones(`ngày thứ ${log.day}`);
-                return messageNormalized.includes(queryNormalized) || dayTextNormalized.includes(queryNormalized);
+                return messageNormalized.includes(queryNormalized) || titleNormalized.includes(queryNormalized) || dayTextNormalized.includes(queryNormalized);
             });
         }
 
         // 2. Tab Filter
-        if (logFilter !== 'all') {
-            result = result.filter(log => log.type === logFilter);
+        if (logFilter === 'critical') {
+            result = result.filter(log => log.severity === 'NGUY_CAP');
+        } else if (logFilter === 'warning') {
+            result = result.filter(log => log.severity === 'CANH_BAO' || log.severity === 'THEO_DOI');
         }
 
         // 3. Sorting logic
@@ -173,13 +243,15 @@ export default function ILSMonitorDashboard() {
             sorted.sort((a, b) => b.day - a.day);
         } else if (logSortOrder === 'severity-crit') {
             sorted.sort((a, b) => {
-                if (a.type === b.type) return a.day - b.day;
-                return a.type === 'critical' ? -1 : 1;
+                if (a.severity === b.severity) return a.day - b.day;
+                const rank = { NGUY_CAP: 3, CANH_BAO: 2, THEO_DOI: 1 };
+                return (rank[b.severity] || 0) - (rank[a.severity] || 0);
             });
         } else if (logSortOrder === 'severity-warn') {
             sorted.sort((a, b) => {
-                if (a.type === b.type) return a.day - b.day;
-                return a.type === 'warning' ? -1 : 1;
+                if (a.severity === b.severity) return a.day - b.day;
+                const rank = { THEO_DOI: 3, CANH_BAO: 2, NGUY_CAP: 1 };
+                return (rank[b.severity] || 0) - (rank[a.severity] || 0);
             });
         }
 
@@ -191,7 +263,7 @@ export default function ILSMonitorDashboard() {
         if (filteredSortedLogs.length === 0) return;
         
         let text = `NHẬT KÝ CẢNH BÁO MÔ PHỎNG HỆ THỐNG ILS\n`;
-        text += `Chu kỳ mô phỏng: ${activeParams.days} ngày | Sai số RMSE: ${rmse.toFixed(3)}%\n`;
+        text += `Chu kỳ mô phỏng: ${currentParams.days} ngày | Sai số RMSE: ${rmse.toFixed(3)}%\n`;
         
         let filterSummary = 'Tất cả';
         if (logFilter === 'critical') filterSummary = 'Chỉ mục Nguy cấp';
@@ -208,8 +280,10 @@ export default function ILSMonitorDashboard() {
         text += `--------------------------------------------------\n\n`;
 
         filteredSortedLogs.forEach(log => {
-            const levelStr = log.type === 'critical' ? '[NGUY CẤP]' : '[CẢNH BÁO]';
-            text += `Ngày thứ ${log.day} - ${levelStr}: ${log.message}\n`;
+            const levelStr = log.severity === 'NGUY_CAP' ? '[NGUY CẤP]' : (log.severity === 'CANH_BAO' ? '[CẢNH BÁO]' : '[THEO DÕI]');
+            text += `Ngày thứ ${log.day} - ${levelStr} - ${log.title}\n`;
+            text += `  Chi tiết: ${log.message}\n`;
+            text += `  Xử lý: ${log.action}\n\n`;
         });
 
         navigator.clipboard.writeText(text)
@@ -223,27 +297,76 @@ export default function ILSMonitorDashboard() {
     // Trigger smart scan alert toast on metrics or day configuration changes
     React.useEffect(() => {
         setToasts([]); // Clear old alerts
-        
-        const { firstCriticalDay, firstVswrCriticalDay } = metrics;
-        const criticalDay = (firstCriticalDay && firstVswrCriticalDay)
-            ? Math.min(firstCriticalDay, firstVswrCriticalDay)
-            : (firstCriticalDay || firstVswrCriticalDay);
 
-        if (criticalDay) {
-            const dateStr = formatDayToDate(criticalDay);
+        const baseRF = currentParams.baselineRF || 100.0;
+        const warnRF = currentParams.warningThreshold || 92.0;
+        const alarmRF = currentParams.alarmThreshold || 88.0;
+        const healthFloor = 85.0;
+
+        const hiWarningThreshold = (warnRF - healthFloor) / (baseRF - healthFloor);
+        const hiAlarmThreshold = (alarmRF - healthFloor) / (baseRF - healthFloor);
+
+        const events = [];
+        if (metrics.warnDay90) {
+            events.push({
+                day: metrics.warnDay90,
+                level: 'warning',
+                title: 'Cảnh báo: R(t) suy giảm',
+                msg: `Cảnh báo hệ thống (R(t) < 0.90 nhưng RF >= ${warnRF}%): Chưa sửa ngay; tăng theo dõi, kiểm tra định kỳ sớm hơn.`
+            });
+        }
+        if (metrics.dangerDay75) {
+            events.push({
+                day: metrics.dangerDay75,
+                level: 'warning',
+                title: 'Cảnh báo: Vào vùng bảo trì',
+                msg: `Cảnh báo hệ thống (RF < ${warnRF}% hoặc HI < ${hiWarningThreshold.toFixed(3)} hoặc R(t) < 0.75): Vào vùng cảnh báo; kiểm tra hệ thống, lập kế hoạch bảo trì.`
+            });
+        }
+        if (metrics.estopDay) {
+            events.push({
+                day: metrics.estopDay,
+                level: 'critical',
+                title: 'Nguy cấp: Cần bảo dưỡng gấp',
+                msg: `Nguy hiểm hệ thống (RF < ${alarmRF}% hoặc HI < ${hiAlarmThreshold.toFixed(3)}): Vùng nguy hiểm; cần kiểm tra kỹ thuật khẩn cấp.`
+            });
+        }
+        if (metrics.firstVswrWarningDay) {
+            events.push({
+                day: metrics.firstVswrWarningDay,
+                level: 'warning',
+                title: 'Cảnh báo: Tăng VSWR',
+                msg: `Cảnh báo sóng đứng (VSWR >= ${(currentParams.vswrWarningThreshold || 1.5).toFixed(2)}): Kiểm tra đường truyền RF: cáp, anten, connector.`
+            });
+        }
+        if (metrics.firstVswrCriticalDay) {
+            events.push({
+                day: metrics.firstVswrCriticalDay,
+                level: 'critical',
+                title: 'Nguy cấp: Lỗi sóng đứng VSWR',
+                msg: `Nguy hiểm sóng đứng (VSWR >= ${(currentParams.vswrAlarmThreshold || 2.0).toFixed(2)}): Nguy cơ mismatch nghiêm trọng; cần ưu tiên xử lý đường truyền RF.`
+            });
+        }
+
+        // Sort events chronologically to show the first occurrence
+        events.sort((a, b) => a.day - b.day);
+
+        if (events.length > 0) {
+            const firstEvent = events[0];
+            const dateStr = formatDayToDate(firstEvent.day);
             addToast(
-                'critical', 
-                'Cần bảo trì và bảo dưỡng', 
-                `⚠️ THÔNG TIN: Thiết bị cần bảo trì bảo dưỡng trước ngày ${dateStr} (Ngày thứ ${criticalDay}) để đảm bảo hoạt động an toàn và tránh chạm ngưỡng nguy hiểm.`
+                firstEvent.level,
+                firstEvent.title,
+                `⚠️ THÔNG TIN: ${firstEvent.msg} (Phát hiện đầu tiên tại Ngày thứ ${firstEvent.day} - ${dateStr})`
             );
         } else {
             addToast(
                 'info',
                 'Hệ thống vận hành an toàn',
-                `✓ THÔNG TIN: Không phát hiện nguy cơ chạm ngưỡng nguy hiểm trong chu kỳ mô phỏng ${activeParams.days} ngày.`
+                `✓ THÔNG TIN: Không phát hiện nguy cơ chạm ngưỡng nguy hiểm trong chu kỳ mô phỏng ${currentParams.days} ngày.`
             );
         }
-    }, [metrics, activeParams.days]);
+    }, [metrics, currentParams, dataSourceMode]);
 
     return (
         <div className="min-h-screen bg-[#F0F5FA] text-slate-800 font-sans flex flex-col">
@@ -295,7 +418,7 @@ export default function ILSMonitorDashboard() {
                 firstVswrWarningDay={firstVswrWarningDay}
                 firstVswrCriticalDay={firstVswrCriticalDay}
                 splitIdx={splitIdx}
-                activeParams={activeParams}
+                activeParams={currentParams}
                 criticalCount={criticalCount}
                 warningCount={warningCount}
                 rawSimulationLogs={rawSimulationLogs}
@@ -304,9 +427,11 @@ export default function ILSMonitorDashboard() {
                 setShowLogsDrawer={setShowLogsDrawer}
                 handleUpdate={handleUpdate}
                 isRunning={isRunning}
-                hasUnsavedChanges={hasUnsavedChanges}
+                hasUnsavedChanges={dataSourceMode === 'python' ? false : hasUnsavedChanges}
                 isSidebarCollapsed={isSidebarCollapsed}
                 setIsSidebarCollapsed={setIsSidebarCollapsed}
+                dataSourceMode={dataSourceMode}
+                setDataSourceMode={setDataSourceMode}
             />
 
             <div className="flex flex-1 overflow-hidden relative">
@@ -325,10 +450,11 @@ export default function ILSMonitorDashboard() {
                     setIsSidebarCollapsed={setIsSidebarCollapsed}
                     expandedSections={expandedSections}
                     toggleSection={toggleSection}
-                    formParams={formParams}
+                    formParams={dataSourceMode === 'python' ? (pythonData?.params || DEFAULT_PARAMS) : formParams}
                     handleChange={handleChange}
                     handleReset={handleReset}
-                    hasUnsavedChanges={hasUnsavedChanges}
+                    hasUnsavedChanges={dataSourceMode === 'python' ? false : hasUnsavedChanges}
+                    readOnly={dataSourceMode === 'python'}
                 />
 
                 {/* MAIN CHARTS AREA */}
@@ -339,7 +465,7 @@ export default function ILSMonitorDashboard() {
                         lastRF={lastRF}
                         lastHI={lastHI}
                         lastRT={lastRT}
-                        activeParams={activeParams}
+                        activeParams={currentParams}
                         metrics={metrics}
                     />
 
@@ -353,7 +479,7 @@ export default function ILSMonitorDashboard() {
                     <ChartsArea
                         chartView={chartView}
                         chartData={chartData}
-                        activeParams={activeParams}
+                        activeParams={currentParams}
                         splitIdx={splitIdx}
                         dangerDay75={dangerDay75}
                         brushRange={brushRange}

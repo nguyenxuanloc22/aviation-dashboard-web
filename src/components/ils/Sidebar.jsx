@@ -19,6 +19,7 @@ export default function Sidebar({
     handleChange,
     handleReset,
     hasUnsavedChanges,
+    readOnly,
 }) {
     const renderAccordionHeader = (id, icon, title) => {
         const isOpen = expandedSections[id];
@@ -78,18 +79,26 @@ export default function Sidebar({
                             </div>
                         </div>
                     )}
+                    {readOnly && (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 text-[10px] text-emerald-800 leading-normal font-semibold flex items-start gap-1.5 shadow-xs">
+                            <ShieldAlert size={12} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                                Đang ở chế độ **Dữ liệu Kiểm định (Python)**. Các tham số bên dưới là kết quả thực tế từ mã nguồn Python. Chuyển sang **Mô phỏng Tương tác** ở thanh công cụ phía trên để tùy chỉnh các thanh trượt.
+                            </div>
+                        </div>
+                    )}
                     
                     {/* Accordion Section 1: Basic Params */}
                     <div className="space-y-1">
                         {renderAccordionHeader('basic', <Sliders size={14} className="text-blue-600" />, 'Thông số cơ bản')}
                         {expandedSections.basic && (
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
-                                <InputRow label="Số ngày mô phỏng" name="days" value={formParams.days} onChange={handleChange} step={1} min={60} max={365} unit="ngày" />
-                                <InputRow label="RF Power định mức" name="baselineRF" value={formParams.baselineRF} onChange={handleChange} unit="%" hint="100% = công suất phát chuẩn" />
-                                <InputRow label="Ngưỡng cảnh báo RF" name="warningThreshold" value={formParams.warningThreshold} onChange={handleChange} unit="%" />
-                                <InputRow label="Ngưỡng dừng đài RF" name="alarmThreshold" value={formParams.alarmThreshold} onChange={handleChange} unit="%" />
-                                <InputRow label="Cảnh báo VSWR" name="vswrWarningThreshold" value={formParams.vswrWarningThreshold} onChange={handleChange} step={0.05} min={1.1} max={2.0} hint="Ngưỡng cảnh báo phản xạ anten (mặc định 1.5)" />
-                                <InputRow label="Dừng đài VSWR" name="vswrAlarmThreshold" value={formParams.vswrAlarmThreshold} onChange={handleChange} step={0.05} min={1.5} max={3.0} hint="Ngưỡng dừng đài do phản xạ anten (mặc định 2.0)" />
+                                <InputRow label="Số ngày mô phỏng" name="days" value={formParams.days} onChange={handleChange} step={1} min={60} max={365} unit="ngày" disabled={readOnly} />
+                                <InputRow label="RF Power định mức" name="baselineRF" value={formParams.baselineRF} onChange={handleChange} unit="%" hint="100% = công suất phát chuẩn" disabled={readOnly} />
+                                <InputRow label="Ngưỡng cảnh báo RF" name="warningThreshold" value={formParams.warningThreshold} onChange={handleChange} unit="%" disabled={readOnly} />
+                                <InputRow label="Ngưỡng dừng đài RF" name="alarmThreshold" value={formParams.alarmThreshold} onChange={handleChange} unit="%" disabled={readOnly} />
+                                <InputRow label="Cảnh báo VSWR" name="vswrWarningThreshold" value={formParams.vswrWarningThreshold} onChange={handleChange} step={0.05} min={1.1} max={2.0} hint="Ngưỡng cảnh báo phản xạ anten (mặc định 1.5)" disabled={readOnly} />
+                                <InputRow label="Dừng đài VSWR" name="vswrAlarmThreshold" value={formParams.vswrAlarmThreshold} onChange={handleChange} step={0.05} min={1.5} max={3.0} hint="Ngưỡng dừng đài do phản xạ anten (mặc định 2.0)" disabled={readOnly} />
                             </div>
                         )}
                     </div>
@@ -99,9 +108,9 @@ export default function Sidebar({
                         {renderAccordionHeader('degradation', <TrendingDown size={14} className="text-blue-600" />, 'Độ suy hao (Degradation)')}
                         {expandedSections.degradation && (
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
-                                <InputRow label="RF Power mục tiêu" name="scenarioEndRF" value={formParams.scenarioEndRF} onChange={handleChange} step={0.5} min={85.0} max={98.0} unit="%" hint="Mức RF Power mô phỏng ở ngày thứ 365" />
-                                <InputRow label="Năng lượng Ea" name="Ea" value={formParams.Ea} onChange={handleChange} step={0.05} min={0.1} max={2.0} unit="eV" hint="Hệ số nhiệt Arrhenius (mặc định 0.70)" />
-                                <InputRow label="Mũ độ ẩm Peck" name="humidityExponent" value={formParams.humidityExponent} onChange={handleChange} step={0.1} min={1.0} max={5.0} hint="Hệ số Peck cho ẩm nhà trạm (mặc định 2.66)" />
+                                <InputRow label="RF Power mục tiêu" name="scenarioEndRF" value={formParams.scenarioEndRF} onChange={handleChange} step={0.5} min={85.0} max={98.0} unit="%" hint="Mức RF Power mô phỏng ở ngày thứ 365" disabled={readOnly} />
+                                <InputRow label="Năng lượng Ea" name="Ea" value={formParams.Ea} onChange={handleChange} step={0.05} min={0.1} max={2.0} unit="eV" hint="Hệ số nhiệt Arrhenius (mặc định 0.70)" disabled={readOnly} />
+                                <InputRow label="Mũ độ ẩm Peck" name="humidityExponent" value={formParams.humidityExponent} onChange={handleChange} step={0.1} min={1.0} max={5.0} hint="Hệ số Peck cho ẩm nhà trạm (mặc định 2.66)" disabled={readOnly} />
                             </div>
                         )}
                     </div>
@@ -132,8 +141,8 @@ export default function Sidebar({
                         {renderAccordionHeader('weibull', <ShieldAlert size={14} className="text-blue-600" />, 'Độ tin cậy R(t) Weibull')}
                         {expandedSections.weibull && (
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
-                                <InputRow label="Shape β" name="beta" value={formParams.beta} onChange={handleChange} step={0.1} min={0.5} max={5} hint="β=1.5 → Pha hao mòn (Wear-out)" />
-                                <InputRow label="Scale η" name="eta" value={formParams.eta} onChange={handleChange} step={10} unit="ngày" hint="MTTF trung bình ≈ 730 ngày" />
+                                <InputRow label="Shape β" name="beta" value={formParams.beta} onChange={handleChange} step={0.1} min={0.5} max={5} hint="β=1.5 → Pha hao mòn (Wear-out)" disabled={readOnly} />
+                                <InputRow label="Scale η" name="eta" value={formParams.eta} onChange={handleChange} step={10} unit="ngày" hint="MTTF trung bình ≈ 730 ngày" disabled={readOnly} />
                             </div>
                         )}
                     </div>
@@ -143,9 +152,9 @@ export default function Sidebar({
                         {renderAccordionHeader('lstm', <Settings size={14} className="text-blue-600" />, 'Cấu hình LSTM')}
                         {expandedSections.lstm && (
                             <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
-                                <InputRow label="Look-back window" name="lookBack" value={formParams.lookBack} onChange={handleChange} step={1} min={10} max={60} unit="ngày" />
-                                <InputRow label="Tỷ lệ tập Train" name="trainRatio" value={formParams.trainRatio} onChange={handleChange} step={0.01} min={0.5} max={0.9} hint="0.748 = ~273 ngày train (hết tháng 9)" />
-                                <InputRow label="Hạt giống Random (Seed)" name="seed" value={formParams.seed} onChange={handleChange} step={1} hint="Thay đổi để tạo nhiễu ngẫu nhiên" />
+                                <InputRow label="Look-back window" name="lookBack" value={formParams.lookBack} onChange={handleChange} step={1} min={10} max={60} unit="ngày" disabled={readOnly} />
+                                <InputRow label="Tỷ lệ tập Train" name="trainRatio" value={formParams.trainRatio} onChange={handleChange} step={0.01} min={0.5} max={0.9} hint="0.748 = ~273 ngày train (hết tháng 9)" disabled={readOnly} />
+                                <InputRow label="Hạt giống Random (Seed)" name="seed" value={formParams.seed} onChange={handleChange} step={1} hint="Thay đổi để tạo nhiễu ngẫu nhiên" disabled={readOnly} />
                             </div>
                         )}
                     </div>
@@ -153,8 +162,9 @@ export default function Sidebar({
                     {/* Sidebar Action Footer */}
                     <div className="pt-2 pb-6">
                         <button 
-                            onClick={handleReset}
-                            className="w-full py-2 px-4 border border-blue-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-center block shadow-xs"
+                            onClick={readOnly ? undefined : handleReset}
+                            disabled={readOnly}
+                            className="w-full py-2 px-4 border border-blue-200 bg-white hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-500 hover:text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-center block shadow-xs"
                         >
                             Đặt lại mặc định
                         </button>
