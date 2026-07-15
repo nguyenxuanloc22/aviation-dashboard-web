@@ -6,13 +6,13 @@ import pythonData from '../simulation/simulation_results.json';
 
 // Modular UI components
 // Modular UI components
-import Toast            from './ils/Toast';
-import LogsDrawer       from './ils/LogsDrawer';
-import Topbar           from './ils/Topbar';
-import Sidebar          from './ils/Sidebar';
-import KpiCards         from './ils/KpiCards';
+import Toast from './ils/Toast';
+import LogsDrawer from './ils/LogsDrawer';
+import Topbar from './ils/Topbar';
+import Sidebar from './ils/Sidebar';
+import KpiCards from './ils/KpiCards';
 import ChartViewToolbar from './ils/ChartViewToolbar';
-import ChartsArea       from './ils/ChartsArea';
+import ChartsArea from './ils/ChartsArea';
 import AirportInfoPanel from './ils/AirportInfoPanel';
 
 // Helper to convert day index (1-365) to solar calendar date DD/MM/YYYY in 2026
@@ -34,6 +34,7 @@ export default function ILSMonitorDashboard() {
     const [formParams, setFormParams] = useState({ ...DEFAULT_PARAMS });
     const [activeParams, setActiveParams] = useState({ ...DEFAULT_PARAMS });
     const [toasts, setToasts] = useState([]);
+    const [pendingToast, setPendingToast] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [showLogsDrawer, setShowLogsDrawer] = useState(false);
@@ -44,7 +45,8 @@ export default function ILSMonitorDashboard() {
         degradation: false,
         weather: false,
         weibull: false,
-        lstm: false
+        lstm: false,
+        vswr: false
     });
 
     // Logs Drawer State
@@ -54,9 +56,6 @@ export default function ILSMonitorDashboard() {
     const [copiedLogs, setCopiedLogs] = useState(false);
     const [brushRange, setBrushRange] = useState(null); // { startIndex, endIndex }
 
-    // Forecast Milestones Dropdown State
-    const [showMilestonesDropdown, setShowMilestonesDropdown] = useState(false);
-    const [pulseMilestones, setPulseMilestones] = useState(false);
 
     // Chart View Mode: 'all' | 'rf' | 'health' | 'env'
     const [chartView, setChartView] = useState('all');
@@ -131,10 +130,9 @@ export default function ILSMonitorDashboard() {
         }
     }, []);
 
-    const addToast = useCallback((level, title, msg) => {
+    const addToast = useCallback((level, title, msg, day = null, date = null) => {
         const id = Date.now() + Math.random();
-        setToasts(p => [...p, { id, level, title, msg }]);
-        setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 8000);
+        setToasts([{ id, level, title, msg, day, date }]);
     }, []);
 
     const dismissToast = useCallback((id) => setToasts(p => p.filter(t => t.id !== id)), []);
@@ -158,6 +156,9 @@ export default function ILSMonitorDashboard() {
     };
 
     const handleUpdate = () => {
+        if (dataSourceMode === 'python') {
+            setDataSourceMode('interactive');
+        }
         setIsRunning(true);
         setTimeout(() => {
             // Parse all parameter values to numeric floats before running simulation
@@ -174,9 +175,7 @@ export default function ILSMonitorDashboard() {
             setFormParams(p => ({ ...p, days: parsed.days.toString() }));
             setActiveParams(parsed);
             setIsRunning(false);
-            // Pulse the milestones button to hint user to check updated values
-            setPulseMilestones(true);
-            setTimeout(() => setPulseMilestones(false), 5000);
+            setPendingToast(true);
         }, 120);
     };
 
@@ -261,20 +260,20 @@ export default function ILSMonitorDashboard() {
     // Copy formatted logs to clipboard
     const handleCopyLogs = useCallback(() => {
         if (filteredSortedLogs.length === 0) return;
-        
+
         let text = `NHẬT KÝ CẢNH BÁO MÔ PHỎNG HỆ THỐNG ILS\n`;
         text += `Chu kỳ mô phỏng: ${currentParams.days} ngày | Sai số RMSE: ${rmse.toFixed(3)}%\n`;
-        
+
         let filterSummary = 'Tất cả';
         if (logFilter === 'critical') filterSummary = 'Chỉ mục Nguy cấp';
         if (logFilter === 'warning') filterSummary = 'Chỉ mục Cảnh báo';
         if (logSearchQuery.trim()) filterSummary += ` + Tìm kiếm: "${logSearchQuery}"`;
-        
+
         let sortSummary = 'Ngày tăng dần';
         if (logSortOrder === 'day-desc') sortSummary = 'Ngày giảm dần';
         if (logSortOrder === 'severity-crit') sortSummary = 'Nguy cấp trước';
         if (logSortOrder === 'severity-warn') sortSummary = 'Cảnh báo trước';
-        
+
         text += `Bộ lọc áp dụng: ${filterSummary} | Sắp xếp: ${sortSummary}\n`;
         text += `Số lượng sự cố sao chép: ${filteredSortedLogs.length}/${rawSimulationLogs.length}\n`;
         text += `--------------------------------------------------\n\n`;
@@ -295,8 +294,10 @@ export default function ILSMonitorDashboard() {
     }, [filteredSortedLogs, rawSimulationLogs.length, activeParams.days, rmse, logFilter, logSearchQuery, logSortOrder]);
 
     // Trigger smart scan alert toast on metrics or day configuration changes
+    // Trigger smart scan alert toast ONLY when pendingToast flag is active (e.g. from handleUpdate)
     React.useEffect(() => {
-        setToasts([]); // Clear old alerts
+        if (!pendingToast) return;
+        setPendingToast(false); // Reset the trigger
 
         const baseRF = currentParams.baselineRF || 100.0;
         const warnRF = currentParams.warningThreshold || 92.0;
@@ -315,17 +316,17 @@ export default function ILSMonitorDashboard() {
                 msg: `Cảnh báo hệ thống (R(t) < 0.90 nhưng RF >= ${warnRF}%): Chưa sửa ngay; tăng theo dõi, kiểm tra định kỳ sớm hơn.`
             });
         }
-        if (metrics.dangerDay75) {
+        if (metrics.firstWarningDay) {
             events.push({
-                day: metrics.dangerDay75,
+                day: metrics.firstWarningDay,
                 level: 'warning',
                 title: 'Cảnh báo: Vào vùng bảo trì',
                 msg: `Cảnh báo hệ thống (RF < ${warnRF}% hoặc HI < ${hiWarningThreshold.toFixed(3)} hoặc R(t) < 0.75): Vào vùng cảnh báo; kiểm tra hệ thống, lập kế hoạch bảo trì.`
             });
         }
-        if (metrics.estopDay) {
+        if (metrics.firstCriticalDay) {
             events.push({
-                day: metrics.estopDay,
+                day: metrics.firstCriticalDay,
                 level: 'critical',
                 title: 'Nguy cấp: Cần bảo dưỡng gấp',
                 msg: `Nguy hiểm hệ thống (RF < ${alarmRF}% hoặc HI < ${hiAlarmThreshold.toFixed(3)}): Vùng nguy hiểm; cần kiểm tra kỹ thuật khẩn cấp.`
@@ -357,21 +358,31 @@ export default function ILSMonitorDashboard() {
             addToast(
                 firstEvent.level,
                 firstEvent.title,
-                `⚠️ THÔNG TIN: ${firstEvent.msg} (Phát hiện đầu tiên tại Ngày thứ ${firstEvent.day} - ${dateStr})`
+                firstEvent.msg,
+                firstEvent.day,
+                dateStr
             );
         } else {
             addToast(
-                'info',
-                'Hệ thống vận hành an toàn',
-                `✓ THÔNG TIN: Không phát hiện nguy cơ chạm ngưỡng nguy hiểm trong chu kỳ mô phỏng ${currentParams.days} ngày.`
+                'success',
+                'Mọi thứ hoạt động trơn tru!',
+                'Hệ thống vận hành an toàn. Không phát hiện nguy cơ chạm ngưỡng nguy hiểm trong chu kỳ mô phỏng.',
+                null,
+                null
             );
         }
-    }, [metrics, currentParams, dataSourceMode]);
+    }, [metrics, currentParams, pendingToast]);
+
+    // Clear alert when data source mode changes (prevents modals from persisting)
+    React.useEffect(() => {
+        setToasts([]);
+    }, [dataSourceMode]);
 
     return (
         <div className="min-h-screen bg-[#F0F5FA] text-slate-800 font-sans flex flex-col">
             <style>{`
                 @keyframes toastIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+                @keyframes modalIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
                 @keyframes shrinkBar { from { width: 100%; } to { width: 0%; } }
                 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
                 input[type=number]::-webkit-inner-spin-button { opacity:0.3; }
@@ -408,17 +419,6 @@ export default function ILSMonitorDashboard() {
 
             {/* Topbar / Taskbar */}
             <Topbar
-                showMilestonesDropdown={showMilestonesDropdown}
-                setShowMilestonesDropdown={setShowMilestonesDropdown}
-                pulseMilestones={pulseMilestones}
-                setPulseMilestones={setPulseMilestones}
-                warnDay90={warnDay90}
-                dangerDay75={dangerDay75}
-                estopDay={estopDay}
-                firstVswrWarningDay={firstVswrWarningDay}
-                firstVswrCriticalDay={firstVswrCriticalDay}
-                splitIdx={splitIdx}
-                activeParams={currentParams}
                 criticalCount={criticalCount}
                 warningCount={warningCount}
                 rawSimulationLogs={rawSimulationLogs}
@@ -438,7 +438,7 @@ export default function ILSMonitorDashboard() {
 
                 {/* Mobile Sidebar Backdrop Overlay */}
                 {!isSidebarCollapsed && (
-                    <div 
+                    <div
                         className="fixed inset-0 bg-slate-900/40 z-30 lg:hidden"
                         onClick={() => setIsSidebarCollapsed(true)}
                     />
@@ -459,7 +459,7 @@ export default function ILSMonitorDashboard() {
 
                 {/* MAIN CHARTS AREA */}
                 <main className="flex-1 overflow-y-auto p-6 space-y-6 min-w-0">
-                    
+
                     {/* KPI Summary Row */}
                     <KpiCards
                         lastRF={lastRF}

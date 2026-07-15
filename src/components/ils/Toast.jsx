@@ -1,58 +1,64 @@
 // ============================================================
-//  TOAST COMPONENT (LIGHT SEVERITIES)
+//  REDESIGNED ALERT MODAL COMPONENT (CENTERED EMERALD SUCCESS STYLE)
 // ============================================================
 export default function Toast({ toasts, onDismiss }) {
     if (!toasts.length) return null;
+
+    // We only show the first alert (there should only be one active warning at a time)
+    const t = toasts[0];
+    const isCritical = t.level === 'critical';
+    const isWarning = t.level === 'warning';
+
     return (
-        <div className="fixed top-16 right-6 z-[9999] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
-            {toasts.map(t => {
-                const isCritical = t.level === 'critical';
-                return (
-                    <div 
-                        key={t.id} 
-                        className={`pointer-events-auto relative overflow-hidden rounded-lg p-4 shadow-lg border flex gap-3 animate-[toastIn_0.3s_ease] ${
-                            isCritical 
-                                ? 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-100/30' 
-                                : t.level === 'warning'
-                                    ? 'bg-white border-l-4 border-amber-500 border-sky-100 shadow-amber-50 text-slate-800'
-                                    : 'bg-white border-l-4 border-blue-500 border-sky-100 shadow-blue-50 text-slate-800'
-                        }`}
-                    >
-                        <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded tracking-wide ${
-                                    isCritical 
-                                        ? 'bg-emerald-700/60 text-white border border-emerald-500/30' 
-                                        : t.level === 'warning' 
-                                            ? 'bg-amber-50 text-amber-600' 
-                                            : 'bg-blue-50 text-blue-600'
-                                }`}>
-                                    {isCritical ? '🔧 CẦN BẢO TRÌ BẢO DƯỠNG' : 
-                                     t.level === 'warning' ? '⚡ CẢNH BÁO' : 'ℹ️ THÔNG TIN'}
-                                </span>
-                            </div>
-                            <div className={`text-xs font-bold mb-0.5 ${isCritical ? 'text-white' : 'text-slate-800'}`}>{t.title}</div>
-                            <div className={`text-[11px] leading-normal ${isCritical ? 'text-emerald-100/90 font-medium' : 'text-slate-500'}`}>{t.msg}</div>
-                        </div>
-                        <button 
-                            onClick={() => onDismiss(t.id)} 
-                            className={`self-start text-xs p-1 transition-colors ${
-                                isCritical ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-slate-600'
-                            }`}
-                        >
-                            ✕
-                        </button>
-                        
-                        {/* Progress timing bar */}
-                        <div 
-                            className={`absolute bottom-0 left-0 h-1 animate-[shrinkBar_8s_linear_forwards] ${
-                                isCritical ? 'bg-white/80' : t.level === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
-                            }`}
-                            style={{ width: '100%' }}
-                        />
-                    </div>
-                );
-            })}
+        <div className="fixed inset-0 bg-slate-900/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl relative border border-slate-100 flex flex-col items-center text-center animate-[modalIn_0.25s_ease-out]">
+                {/* Close Button X in top right corner */}
+                <button
+                    onClick={() => onDismiss(t.id)}
+                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors p-1.5 text-base font-bold cursor-pointer"
+                    aria-label="Đóng"
+                >
+                    ✕
+                </button>
+
+                {/* Big Green Circle with checkmark (matches the success image styling) */}
+                <div className="w-20 h-20 rounded-full bg-emerald-50 flex items-center justify-center mb-6 border-4 border-emerald-100/60">
+                    <svg className="w-10 h-10 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+
+                {/* Header Title */}
+                <h3 className="text-xl font-black text-slate-800 mb-3 tracking-wide px-4">
+                    {t.title}
+                </h3>
+
+                {/* Alert Badge Info */}
+                <div className="mb-4">
+                    <span className={`text-[10px] font-bold px-3 py-1 rounded-full tracking-wide uppercase ${isCritical
+                        ? 'bg-red-50 text-red-600 border border-red-100'
+                        : isWarning
+                            ? 'bg-amber-50 text-amber-600 border border-amber-100'
+                            : 'bg-blue-50 text-blue-600 border border-blue-100'
+                        }`}>
+                        {isCritical ? '🔧 Cần Bảo Trì Khẩn Cấp' :
+                            isWarning ? '⚠️ Cảnh Báo Hệ Thống' : 'ℹ️ Thông Tin'}
+                    </span>
+                </div>
+
+                {/* Description details */}
+                <p className="text-slate-500 text-[13px] leading-relaxed mb-6 font-medium max-w-sm">
+                    {t.msg}
+                </p>
+
+                {/* Emerald green CTA button (Tuyệt vời) */}
+                <button
+                    onClick={() => onDismiss(t.id)}
+                    className="w-full px-8 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-lg font-bold transition-all shadow-md shadow-emerald-500/20 hover:shadow-lg cursor-pointer text-xs uppercase tracking-wider"
+                >
+                    Đã hiểu
+                </button>
+            </div>
         </div>
     );
 }

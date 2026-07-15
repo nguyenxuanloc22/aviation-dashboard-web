@@ -1,4 +1,4 @@
-import { Sliders, Settings, TrendingDown, Cloud, ShieldAlert, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Sliders, Settings, TrendingDown, Cloud, ShieldAlert, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle, Activity } from 'lucide-react';
 import InputRow from './InputRow';
 import airportInfo from '../../simulation/ils_info.json';
 
@@ -97,6 +97,15 @@ export default function Sidebar({
                                 <InputRow label="RF Power định mức" name="baselineRF" value={formParams.baselineRF} onChange={handleChange} unit="%" hint="100% = công suất phát chuẩn" disabled={readOnly} />
                                 <InputRow label="Ngưỡng cảnh báo RF" name="warningThreshold" value={formParams.warningThreshold} onChange={handleChange} unit="%" disabled={readOnly} />
                                 <InputRow label="Ngưỡng dừng đài RF" name="alarmThreshold" value={formParams.alarmThreshold} onChange={handleChange} unit="%" disabled={readOnly} />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Accordion Section 1b: VSWR Config */}
+                    <div className="space-y-1">
+                        {renderAccordionHeader('vswr', <Activity size={14} className="text-blue-600" />, 'Thông số VSWR')}
+                        {expandedSections.vswr && (
+                            <div className="bg-white border border-blue-100 rounded-lg p-3 shadow-xs space-y-1">
                                 <InputRow label="Cảnh báo VSWR" name="vswrWarningThreshold" value={formParams.vswrWarningThreshold} onChange={handleChange} step={0.05} min={1.1} max={2.0} hint="Ngưỡng cảnh báo phản xạ anten (mặc định 1.5)" disabled={readOnly} />
                                 <InputRow label="Dừng đài VSWR" name="vswrAlarmThreshold" value={formParams.vswrAlarmThreshold} onChange={handleChange} step={0.05} min={1.5} max={3.0} hint="Ngưỡng dừng đài do phản xạ anten (mặc định 2.0)" disabled={readOnly} />
                             </div>
