@@ -575,18 +575,24 @@ export function computeMetrics(chartData, params, N) {
     // Scan for RF warning and alarm days specifically
     let rfWarningDay = null;
     let rfAlarmDay = null;
+    let hiWarningDay = null;
+    let hiAlarmDay = null;
+    let rtWarningDay = null;
+    let rtAlarmDay = null;
+
     for (let t = 0; t < days; t++) {
         const d = chartData[t];
         if (!d) break;
-        if (rfWarningDay === null && d.rfActual < warningThreshold) {
-            rfWarningDay = t + 1;
-        }
-        if (rfAlarmDay === null && d.rfActual < alarmThreshold) {
-            rfAlarmDay = t + 1;
-        }
+        if (rfWarningDay === null && d.rfActual < warningThreshold) rfWarningDay = t + 1;
+        if (rfAlarmDay === null && d.rfActual < alarmThreshold) rfAlarmDay = t + 1;
+        if (hiWarningDay === null && d.hi < hiWarningThreshold) hiWarningDay = t + 1;
+        if (hiAlarmDay === null && d.hi < hiAlarmThreshold) hiAlarmDay = t + 1;
+        const R_t = d.rt * 100;
+        if (rtWarningDay === null && R_t < 90) rtWarningDay = t + 1;
+        if (rtAlarmDay === null && R_t < 75) rtAlarmDay = t + 1;
     }
 
-    // 4. Milestones scanning
+    // 4. Milestones scanning (Legacy)
     let warnDay90 = null, dangerDay75 = null, estopDay = null;
     for (let t = 0; t < days; t++) {
         const d = chartData[t];
@@ -674,6 +680,10 @@ export function computeMetrics(chartData, params, N) {
         firstVswrCriticalDay,
         rfWarningDay,
         rfAlarmDay,
+        hiWarningDay,
+        hiAlarmDay,
+        rtWarningDay,
+        rtAlarmDay,
         warnDay90,
         dangerDay75,
         estopDay,

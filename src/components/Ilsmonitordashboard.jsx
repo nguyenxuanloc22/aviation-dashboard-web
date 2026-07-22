@@ -97,21 +97,9 @@ export default function ILSMonitorDashboard() {
         return computeMetrics(result.chartData, currentParams, N);
     }, [result.chartData, currentParams, N]);
 
-    // Step 4: Fixed X-Axis plotting array (subsequent days set to null)
+    // Step 4: Dynamically scale X-Axis to fit exactly N days to fill the chart width
     const chartDataForPlotting = useMemo(() => {
-        return result.chartData.map(item => {
-            if (item.day <= N) return item;
-            return {
-                ...item,
-                rfActual: null,
-                rfAI: null,
-                rfRawLSTM: null,
-                rfBaseline: null,
-                hi: null,
-                rt: null,
-                vswr: null
-            };
-        });
+        return result.chartData.filter(item => item.day <= N);
     }, [result.chartData, N]);
 
     const chartData = chartDataForPlotting;
@@ -311,17 +299,23 @@ export default function ILSMonitorDashboard() {
         if (metrics.warnDay90) {
             events.push({
                 day: metrics.warnDay90,
-                level: 'warning',
-                title: 'Cảnh báo: R(t) suy giảm',
-                msg: `Cảnh báo hệ thống (R(t) < 0.90 nhưng RF >= ${warnRF}%): Chưa sửa ngay; tăng theo dõi, kiểm tra định kỳ sớm hơn.`
+                level: 'info',
+                title: 'Thông báo: R(t) suy giảm',
+                msg: `Thông báo hệ thống (R(t) < 0.90 nhưng RF >= ${warnRF}%): Chưa sửa ngay; tăng theo dõi, kiểm tra định kỳ sớm hơn.`
             });
         }
         if (metrics.firstWarningDay) {
+            const warnEventData = chartData[metrics.firstWarningDay - 1];
+            const rtValue = warnEventData ? warnEventData.rt : 0;
+            const rtFormatted = rtValue.toLocaleString('vi-VN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+            const warnDateStr = formatDayToDate(metrics.firstWarningDay);
+            const shortWarnDate = warnDateStr ? warnDateStr.split('/').slice(0, 2).map(d => parseInt(d, 10)).join('/') : '';
+            
             events.push({
                 day: metrics.firstWarningDay,
                 level: 'warning',
-                title: 'Cảnh báo: Vào vùng bảo trì',
-                msg: `Cảnh báo hệ thống (RF < ${warnRF}% hoặc HI < ${hiWarningThreshold.toFixed(3)} hoặc R(t) < 0.75): Vào vùng cảnh báo; kiểm tra hệ thống, lập kế hoạch bảo trì.`
+                title: 'Chạm ngưỡng cảnh báo',
+                msg: `Cảnh báo R(t) chạm ngưỡng cảnh báo: R(t)=${rtFormatted} vào ngày ${shortWarnDate} (ngày ${metrics.firstWarningDay})-Lập kế hoạch bảo trì hệ thống tổng thể, rà soát lại cấu hình vận hành để tìm nguyên nhân suy hao`
             });
         }
         if (metrics.firstCriticalDay) {
@@ -349,8 +343,14 @@ export default function ILSMonitorDashboard() {
             });
         }
 
-        // Sort events chronologically to show the first occurrence
-        events.sort((a, b) => a.day - b.day);
+        // Sort events by severity (critical > warning > info), then chronologically
+        events.sort((a, b) => {
+            const severityRank = { 'critical': 3, 'warning': 2, 'info': 1 };
+            const rankA = severityRank[a.level] || 0;
+            const rankB = severityRank[b.level] || 0;
+            if (rankA !== rankB) return rankB - rankA;
+            return a.day - b.day;
+        });
 
         if (events.length > 0) {
             const firstEvent = events[0];

@@ -61,7 +61,7 @@ export default function ChartsArea({
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                                 <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                                     <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                                    ① RF Power Toàn chu kỳ (365 ngày)
+                                    ① RF Power Toàn chu kỳ ({chartData.length} ngày)
                                 </h2>
                                 <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-100 rounded px-2 py-0.5 self-start">
                                     Bắt đầu dự báo AI: Ngày {splitIdx + 1}
@@ -272,7 +272,7 @@ export default function ChartsArea({
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                             <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-                                Hệ số sóng đứng VSWR theo thời gian (365 ngày)
+                                Hệ số sóng đứng VSWR theo thời gian ({chartData.length} ngày)
                             </h2>
                             <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-100 rounded px-2 py-0.5 self-start">
                                 Ngưỡng lý tưởng ≈ 1.0 | Cảnh báo: {activeParams.vswrWarningThreshold} | Nguy hiểm: {activeParams.vswrAlarmThreshold}

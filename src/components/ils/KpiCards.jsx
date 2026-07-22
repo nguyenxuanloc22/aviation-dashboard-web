@@ -17,7 +17,17 @@ const formatDayToDate = (day) => {
 //    metrics (firstWarningDay, firstCriticalDay)
 // ============================================================
 export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics }) {
-    const { firstWarningDay, firstCriticalDay, lastVSWR, firstVswrWarningDay, rfWarningDay, rfAlarmDay } = metrics || {};
+    const { 
+        firstWarningDay, firstCriticalDay, lastVSWR, firstVswrWarningDay, firstVswrCriticalDay, 
+        rfWarningDay, rfAlarmDay, hiWarningDay, hiAlarmDay, rtWarningDay, rtAlarmDay 
+    } = metrics || {};
+    
+    const baseRF = activeParams.baselineRF || 100.0;
+    const warnRF = activeParams.warningThreshold || 92.0;
+    const alarmRF = activeParams.alarmThreshold || 88.0;
+    const healthFloor = 85.0;
+    const hiWarnThresh = ((warnRF - healthFloor) / (baseRF - healthFloor)).toFixed(4);
+    const hiAlarmThresh = ((alarmRF - healthFloor) / (baseRF - healthFloor)).toFixed(4);
     
     // Status classification:
     // NGUY HIỂM (RF < 88), CẢNH BÁO (88 <= RF < 92), BÌNH THƯỜNG (RF >= 92)
@@ -131,9 +141,12 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                     </div>
                 </div>
                 <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-50 leading-normal">
-                    Chỉ số sức khỏe HI cuối: <span className="font-semibold text-slate-700">{lastHI.toFixed(2)}</span>
-                    <div className="text-[10px] text-slate-400">
-                        Chạm mức nguy cấp: {firstCriticalDay ? <span className="text-red-500 font-semibold">{formatDayToDate(firstCriticalDay)} (Ngày {firstCriticalDay})</span> : "Không"}
+                    Chỉ số sức khỏe HI cuối: <span className="font-semibold text-slate-700">{lastHI.toFixed(4)}</span>
+                    <div className="mt-1 text-[10px] text-slate-400 leading-snug">
+                        Chạm cảnh báo (&lt; {hiWarnThresh}): {hiWarningDay ? <span className="text-amber-600 font-bold">{formatDayToDate(hiWarningDay)} (Ngày {hiWarningDay})</span> : "Không"}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-slate-400 leading-snug">
+                        Chạm nguy cấp (&lt; {hiAlarmThresh}): {hiAlarmDay ? <span className="text-red-600 font-bold">{formatDayToDate(hiAlarmDay)} (Ngày {hiAlarmDay})</span> : "Không"}
                     </div>
                 </div>
             </div>
@@ -153,13 +166,21 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                     </div>
                 </div>
                 <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-50 leading-normal">
-                    {lastRT < 0.75 ? (
-                        <span className="text-red-600 font-semibold">R(t) &lt; 0.75: Mức độ tin cậy nguy hiểm!</span>
-                    ) : lastRT < 0.90 ? (
-                        <span className="text-amber-600 font-semibold">R(t) &lt; 0.90: Suy giảm độ tin cậy.</span>
-                    ) : (
-                        <span className="text-emerald-600 font-semibold">Vận hành cực kỳ tin cậy.</span>
-                    )}
+                    <div className="mb-2">
+                        {lastRT < 0.75 ? (
+                            <span className="text-red-600 font-semibold">R(t) &lt; 0.75: Mức độ tin cậy nguy hiểm!</span>
+                        ) : lastRT < 0.90 ? (
+                            <span className="text-amber-600 font-semibold">R(t) &lt; 0.90: Suy giảm độ tin cậy.</span>
+                        ) : (
+                            <span className="text-emerald-600 font-semibold">Vận hành cực kỳ tin cậy.</span>
+                        )}
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-snug">
+                        Chạm cảnh báo (&lt; 90%): {rtWarningDay ? <span className="text-amber-600 font-bold">{formatDayToDate(rtWarningDay)} (Ngày {rtWarningDay})</span> : "Không"}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-slate-400 leading-snug">
+                        Chạm nguy hiểm (&lt; 75%): {rtAlarmDay ? <span className="text-red-600 font-bold">{formatDayToDate(rtAlarmDay)} (Ngày {rtAlarmDay})</span> : "Không"}
+                    </div>
                 </div>
             </div>
 
@@ -178,15 +199,20 @@ export default function KpiCards({ lastRF, lastHI, lastRT, activeParams, metrics
                     </div>
                 </div>
                 <div className="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-50 leading-normal">
-                    {lastVSWR >= activeParams.vswrAlarmThreshold ? (
-                        <span className="text-red-600 font-semibold">VSWR vượt ngưỡng nguy cấp.</span>
-                    ) : lastVSWR >= activeParams.vswrWarningThreshold ? (
-                        <span className="text-amber-600 font-semibold">Vượt ngưỡng cảnh báo VSWR.</span>
-                    ) : (
-                        <span className="text-emerald-600 font-semibold">Phối hợp trở kháng anten tốt.</span>
-                    )}
-                    <div className="mt-1 text-[10px] text-slate-400">
-                        Vượt cảnh báo: {firstVswrWarningDay ? <span className="text-amber-600 font-semibold">{formatDayToDate(firstVswrWarningDay)} (Ngày {firstVswrWarningDay})</span> : "Không"}
+                    <div className="mb-2">
+                        {lastVSWR >= activeParams.vswrAlarmThreshold ? (
+                            <span className="text-red-600 font-semibold">VSWR vượt ngưỡng nguy cấp.</span>
+                        ) : lastVSWR >= activeParams.vswrWarningThreshold ? (
+                            <span className="text-amber-600 font-semibold">Vượt ngưỡng cảnh báo VSWR.</span>
+                        ) : (
+                            <span className="text-emerald-600 font-semibold">Phối hợp trở kháng anten tốt.</span>
+                        )}
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-snug">
+                        Vượt cảnh báo (&ge; {(activeParams.vswrWarningThreshold || 1.5).toFixed(2)}): {firstVswrWarningDay ? <span className="text-amber-600 font-bold">{formatDayToDate(firstVswrWarningDay)} (Ngày {firstVswrWarningDay})</span> : "Không"}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-slate-400 leading-snug">
+                        Vượt nguy cấp (&ge; {(activeParams.vswrAlarmThreshold || 2.0).toFixed(2)}): {firstVswrCriticalDay ? <span className="text-red-600 font-bold">{formatDayToDate(firstVswrCriticalDay)} (Ngày {firstVswrCriticalDay})</span> : "Không"}
                     </div>
                 </div>
             </div>
