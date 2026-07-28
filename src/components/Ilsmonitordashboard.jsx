@@ -34,7 +34,7 @@ export default function ILSMonitorDashboard() {
     const [formParams, setFormParams] = useState({ ...DEFAULT_PARAMS });
     const [activeParams, setActiveParams] = useState({ ...DEFAULT_PARAMS });
     const [toasts, setToasts] = useState([]);
-    const [pendingToast, setPendingToast] = useState(false);
+    const [pendingToast, setPendingToast] = useState(true);
     const [isRunning, setIsRunning] = useState(false);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [showLogsDrawer, setShowLogsDrawer] = useState(false);
@@ -118,9 +118,9 @@ export default function ILSMonitorDashboard() {
         }
     }, []);
 
-    const addToast = useCallback((level, title, msg, day = null, date = null) => {
+    const addToast = useCallback((level, title, msg, day = null, date = null, rfVal = null, threshold = null, recommendations = []) => {
         const id = Date.now() + Math.random();
-        setToasts([{ id, level, title, msg, day, date }]);
+        setToasts([{ id, level, title, msg, day, date, rfVal, threshold, recommendations }]);
     }, []);
 
     const dismissToast = useCallback((id) => setToasts(p => p.filter(t => t.id !== id)), []);
@@ -281,101 +281,86 @@ export default function ILSMonitorDashboard() {
             .catch(err => console.error('Lỗi khi sao chép:', err));
     }, [filteredSortedLogs, rawSimulationLogs.length, activeParams.days, rmse, logFilter, logSearchQuery, logSortOrder]);
 
-    // Trigger smart scan alert toast on metrics or day configuration changes
-    // Trigger smart scan alert toast ONLY when pendingToast flag is active (e.g. from handleUpdate)
+    // Trigger smart scan alert toast ONLY for RF metrics when pendingToast flag is active
     React.useEffect(() => {
         if (!pendingToast) return;
         setPendingToast(false); // Reset the trigger
 
-        const baseRF = currentParams.baselineRF || 100.0;
         const warnRF = currentParams.warningThreshold || 92.0;
         const alarmRF = currentParams.alarmThreshold || 88.0;
-        const healthFloor = 85.0;
 
-        const hiWarningThreshold = (warnRF - healthFloor) / (baseRF - healthFloor);
-        const hiAlarmThreshold = (alarmRF - healthFloor) / (baseRF - healthFloor);
+        let rfAlarmDay = metrics.rfAlarmDay;
+        let rfWarnDay = metrics.rfWarningDay;
 
-        const events = [];
-        if (metrics.warnDay90) {
-            events.push({
-                day: metrics.warnDay90,
-                level: 'info',
-                title: 'Thông báo: R(t) suy giảm',
-                msg: `Thông báo hệ thống (R(t) < 0.90 nhưng RF >= ${warnRF}%): Chưa sửa ngay; tăng theo dõi, kiểm tra định kỳ sớm hơn.`
-            });
+        // Fallback scan active chartData if metrics days scan was not populated
+        if (!rfAlarmDay && chartData && chartData.length > 0) {
+            const foundAlarm = chartData.find(d => d.rfActual < alarmRF);
+            if (foundAlarm) rfAlarmDay = foundAlarm.day;
         }
-        if (metrics.firstWarningDay) {
-            const warnEventData = chartData[metrics.firstWarningDay - 1];
-            const rtValue = warnEventData ? warnEventData.rt : 0;
-            const rtFormatted = rtValue.toLocaleString('vi-VN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-            const warnDateStr = formatDayToDate(metrics.firstWarningDay);
-            const shortWarnDate = warnDateStr ? warnDateStr.split('/').slice(0, 2).map(d => parseInt(d, 10)).join('/') : '';
-            
-            events.push({
-                day: metrics.firstWarningDay,
-                level: 'warning',
-                title: 'Chạm ngưỡng cảnh báo',
-                msg: `Cảnh báo R(t) chạm ngưỡng cảnh báo: R(t)=${rtFormatted} vào ngày ${shortWarnDate} (ngày ${metrics.firstWarningDay})-Lập kế hoạch bảo trì hệ thống tổng thể, rà soát lại cấu hình vận hành để tìm nguyên nhân suy hao`
-            });
-        }
-        if (metrics.firstCriticalDay) {
-            events.push({
-                day: metrics.firstCriticalDay,
-                level: 'critical',
-                title: 'Nguy cấp: Cần bảo dưỡng gấp',
-                msg: `Nguy hiểm hệ thống (RF < ${alarmRF}% hoặc HI < ${hiAlarmThreshold.toFixed(3)}): Vùng nguy hiểm; cần kiểm tra kỹ thuật khẩn cấp.`
-            });
-        }
-        if (metrics.firstVswrWarningDay) {
-            events.push({
-                day: metrics.firstVswrWarningDay,
-                level: 'warning',
-                title: 'Cảnh báo: Tăng VSWR',
-                msg: `Cảnh báo sóng đứng (VSWR >= ${(currentParams.vswrWarningThreshold || 1.5).toFixed(2)}): Kiểm tra đường truyền RF: cáp, anten, connector.`
-            });
-        }
-        if (metrics.firstVswrCriticalDay) {
-            events.push({
-                day: metrics.firstVswrCriticalDay,
-                level: 'critical',
-                title: 'Nguy cấp: Lỗi sóng đứng VSWR',
-                msg: `Nguy hiểm sóng đứng (VSWR >= ${(currentParams.vswrAlarmThreshold || 2.0).toFixed(2)}): Nguy cơ mismatch nghiêm trọng; cần ưu tiên xử lý đường truyền RF.`
-            });
+        if (!rfWarnDay && chartData && chartData.length > 0) {
+            const foundWarn = chartData.find(d => d.rfActual < warnRF);
+            if (foundWarn) rfWarnDay = foundWarn.day;
         }
 
-        // Sort events by severity (critical > warning > info), then chronologically
-        events.sort((a, b) => {
-            const severityRank = { 'critical': 3, 'warning': 2, 'info': 1 };
-            const rankA = severityRank[a.level] || 0;
-            const rankB = severityRank[b.level] || 0;
-            if (rankA !== rankB) return rankB - rankA;
-            return a.day - b.day;
-        });
+        if (rfAlarmDay) {
+            const dataPoint = chartData[rfAlarmDay - 1] || chartData.find(d => d.day === rfAlarmDay);
+            const rfVal = dataPoint ? dataPoint.rfActual : alarmRF;
+            const dateStr = formatDayToDate(rfAlarmDay);
+            const shortDate = dateStr ? dateStr.split('/').slice(0, 2).map(d => parseInt(d, 10)).join('/') : `Ngày ${rfAlarmDay}`;
 
-        if (events.length > 0) {
-            const firstEvent = events[0];
-            const dateStr = formatDayToDate(firstEvent.day);
             addToast(
-                firstEvent.level,
-                firstEvent.title,
-                firstEvent.msg,
-                firstEvent.day,
-                dateStr
+                'critical',
+                'Công suất RF mức NGUY HIỂM',
+                `Cảnh báo chỉ số RF suy giảm nghiêm trọng xuống ${rfVal.toFixed(2)}% (dưới ngưỡng nguy hiểm ${alarmRF}%) vào ngày ${shortDate} (ngày thứ ${rfAlarmDay}).`,
+                rfAlarmDay,
+                dateStr,
+                rfVal,
+                alarmRF,
+                [
+                    'Kích hoạt khối máy phát RF dự phòng (Standby Transmitter) ngay lập tức để duy trì liên tục tín hiệu dẫn đường ILS.',
+                    'Cử kỹ thuật viên ứng trực khẩn cấp kiểm tra khối khuếch đại công suất (Power Amplifier - PA).',
+                    'Kiểm tra điện áp nguồn cấp DC, đường truyền cáp dẫn và đo chỉ số sóng đứng VSWR để loại trừ nguy cơ cháy hỏng linh kiện.'
+                ]
+            );
+        } else if (rfWarnDay) {
+            const dataPoint = chartData[rfWarnDay - 1] || chartData.find(d => d.day === rfWarnDay);
+            const rfVal = dataPoint ? dataPoint.rfActual : warnRF;
+            const dateStr = formatDayToDate(rfWarnDay);
+            const shortDate = dateStr ? dateStr.split('/').slice(0, 2).map(d => parseInt(d, 10)).join('/') : `Ngày ${rfWarnDay}`;
+
+            addToast(
+                'warning',
+                'Chạm ngưỡng CẢNH BÁO RF',
+                `Cảnh báo chỉ số công suất phát RF giảm xuống ${rfVal.toFixed(2)}% (chạm ngưỡng cảnh báo ${warnRF}%) vào ngày ${shortDate} (ngày thứ ${rfWarnDay}).`,
+                rfWarnDay,
+                dateStr,
+                rfVal,
+                warnRF,
+                [
+                    'Rà soát, kiểm tra và cân chỉnh tầng tiền khuếch đại RF (Pre-amplifier) và các mối nối cáp tín hiệu.',
+                    'Lập kế hoạch bảo trì kỹ thuật tổng thể, rà soát lại cấu hình vận hành để tìm nguyên nhân suy hao công suất.',
+                    'Tăng cường tần suất theo dõi chỉ số RF từ xa hàng ngày.'
+                ]
             );
         } else {
             addToast(
                 'success',
-                'Mọi thứ hoạt động trơn tru!',
-                'Hệ thống vận hành an toàn. Không phát hiện nguy cơ chạm ngưỡng nguy hiểm trong chu kỳ mô phỏng.',
+                'Công suất RF An Toàn',
+                `Chỉ số công suất phát RF luôn duy trì ổn định trên mức an toàn (RF ≥ ${warnRF}%) trong suốt chu kỳ mô phỏng.`,
                 null,
-                null
+                null,
+                metrics.lastRF,
+                warnRF,
+                [
+                    'Hệ thống đang vận hành ổn định. Tiếp tục duy trì giám sát định kỳ theo tiêu chuẩn an toàn hàng không.'
+                ]
             );
         }
-    }, [metrics, currentParams, pendingToast]);
+    }, [metrics, currentParams, pendingToast, chartData, addToast]);
 
-    // Clear alert when data source mode changes (prevents modals from persisting)
+    // Refresh toast trigger when data source mode changes
     React.useEffect(() => {
-        setToasts([]);
+        setPendingToast(true);
     }, [dataSourceMode]);
 
     return (
